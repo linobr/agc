@@ -1,4 +1,5 @@
-// AGC v2 adds walk settings and a world-space spawn; v1 migrates in memory.
+import { validateGameplay } from "./gameplay.js";
+// AGC v3 adds declarative gameplay; v1 and v2 migrate in memory.
 export const DEFAULT_WALK = Object.freeze({ slope:40, stepHeight:0.2, minArea:0.1, spawnMode:"auto", spawn:null });
 export const MAX_PROJECT_BYTES = 2 * 1024 * 1024;
 export const MAX_GLB_BYTES = 250 * 1024 * 1024;
@@ -35,8 +36,9 @@ export function parseProject(text) {
   try { p = JSON.parse(text); }
   catch { throw new Error("Invalid AGC project: the file is not valid JSON."); }
   requireValue(p?.format === "agc-project", "expected format agc-project");
-  if (![1,2].includes(p.version)) throw new Error(`Unsupported AGC project version: ${String(p.version)}. This editor supports versions 1 and 2.`);
+  if (![1,2,3].includes(p.version)) throw new Error(`Unsupported AGC project version: ${String(p.version)}. This editor supports versions 1, 2 and 3.`);
   if (p.version === 1) { p.walk = { ...DEFAULT_WALK }; p.version = 2; }
+  if (p.version === 2) { p.gameplay = []; p.version = 3; }
   const w = p.walk;
   requireValue(w && typeof w === 'object', 'walk settings');
   for (const [key,min,max] of [['slope',0,50],['stepHeight',0,0.4],['minArea',0,10]])
@@ -66,6 +68,7 @@ export function parseProject(text) {
       requireValue(s.sha256 === null || /^[a-f0-9]{64}$/.test(s.sha256), "scan checksum");
     } else requireValue(/^#[a-f0-9]{6}$/i.test(o.color), "primitive color");
   }
+  validateGameplay(p.gameplay, ids);
   requireValue(models <= 1, "only one scan is supported");
   const e = p.editor;
   requireValue(e && typeof e.collidersVisible === "boolean", "collider visibility");

@@ -5,6 +5,8 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import * as CANNON from "cannon-es";
 import "./style.css";
 import { analyzeWalk, WalkPlayer, triangleOverlay } from "./walk.js";
+import { GameSession } from "./gameplay.js";
+import { GameplayEditor } from "./gameplay-editor.js";
 import { DEFAULT_WALK, MAX_PROJECT_BYTES, MAX_GLB_BYTES, fileName, scanMetadata, parseProject, serializePose, restorePose } from "./project.js";
 
 const $ = (id) => document.getElementById(id);
@@ -81,6 +83,14 @@ let objects = [],
   pendingProject = null;
 let walkSettings = { ...DEFAULT_WALK }, spawnMode = false;
 let walkData = null, walkPlayer = null, walkSignature = '', walkView = null, walkAccumulator = 0;
+let gameSession = null, gameRespawnVersion = 0;
+const gameplayEditor = new GameplayEditor(scene, {
+  busy: () => !!walkPlayer || testMode || !$("loadingOverlay").hidden,
+  select: () => select(null, true),
+  position: () => walkData?.spawn || new THREE.Vector3(0,0,0),
+  notify,
+  change: updateStats,
+});
 const walkHelpers = new THREE.Group(), walkKeys = new Set();
 scene.add(walkHelpers);
 const raycaster = new THREE.Raycaster(),
@@ -138,7 +148,7 @@ function updateStats() {
       : objects.length
         ? `${objects.length} objects`
         : "Untitled scene";
-  $("emptyState").style.display = objects.length ? "none" : "block";
+  $("emptyState").style.display = objects.length || gameplayEditor.definitions.length ? "none" : "block";
   renderObjectList();
 }
 function boundsFor(root) {
@@ -347,7 +357,8 @@ function saveProject() {
   }
   try {
     const project = {
-      format: "agc-project", version: 2,
+      format: "agc-project", version: 3,
+      gameplay: structuredClone(gameplayEditor.definitions),
       walk: { ...walkSettings },
       objects: objects.map((o) => ({
         id: o.id, name: o.name, kind: o.kind,
@@ -443,6 +454,7 @@ function applyProject(project, modelRoot = null) {
   }
   resetTest();
   for (const entry of [...objects]) removeEntry(entry);
+  gameplayEditor.load(project.gameplay);
   collidersVisible = project.editor.collidersVisible;
   $("colliderToggle").classList.toggle("on", collidersVisible);
   for (const { data, root } of prepared) {
@@ -478,7 +490,8 @@ function applyProject(project, modelRoot = null) {
   rebuildWalk();
   projectMessage("Project opened. Editor transforms and colliders restored. No autosave; use Save Project after changes.");
 }
-function select(entry) {
+function select(entry, keepGameplay = false) {
+  if (!keepGameplay) gameplayEditor.select(null, false);
   selected = entry;
   transform.detach();
   $("noSelection").hidden = !!entry;
@@ -705,6 +718,7 @@ function startTest() {
   if (walkPlayer) stopWalk();
   if (testMode) return;
   testMode = true;
+  gameplayEditor.lock(true);
   for (const entry of objects) {
     entry.body = makeBody(entry);
     world.addBody(entry.body);
@@ -743,6 +757,7 @@ function resetTest() {
     dragging = null;
   }
   testMode = false;
+  gameplayEditor.lock(false);
   $("testBtn").innerHTML = '<span class="play-icon">▶</span> Test scene';
   $("testBanner").hidden = true;
   $("testBanner").style.display = "none";
@@ -770,6 +785,11 @@ function onPointerDown(e) {
   }
   if (e.button !== 0) return;
   canvasPointer(e);
+  if (!testMode && !transform.dragging) {
+    const gameHit = gameplayEditor.pick(raycaster);
+    const scanHit = raycaster.intersectObjects(objects.map(o=>o.root),true)[0];
+    if (gameHit && (!scanHit || gameHit.distance <= scanHit.distance)) { gameplayEditor.select(gameHit.id); return; }
+  }
   if (testMode) {
     const hits = raycaster.intersectObjects(
       objects.map((o) => o.root),
@@ -946,7 +966,7 @@ for (const id of ['spawnX','spawnY','spawnZ']) $(id).onchange = () => {
 function showWalkHelpers() {
   for (const o of walkHelpers.children) o.visible = $(o.name === 'surfaces' ? 'walkSurfaces' : o.name === 'colliders' ? 'walkColliders' : 'walkMarkers').checked && (o.name !== 'spawn' || !!walkSettings.spawn);
 }
-function startWalk() {
+function startWalk(withGame = false) {
   if (!$("loadingOverlay").hidden || pendingProject) return;
   resetTest();
   invalidateWalk();
@@ -954,19 +974,27 @@ function startWalk() {
   if (!updateSpawn()) return;
   setSpawnMode(false);
   walkView = { position: camera.position.clone(), target: orbit.target.clone(), near: camera.near, far: camera.far };
+  gameSession = withGame ? new GameSession(gameplayEditor.definitions) : null;
   walkPlayer = new WalkPlayer(walkData); walkAccumulator = 0; walkKeys.clear();
+  gameRespawnVersion = walkPlayer.respawnVersion;
+  gameplayEditor.lock(true); gameplayEditor.sync(gameSession);
+  $('gameBtn').disabled = true;
+  $('gameHud').hidden = !gameSession; $('gameWin').hidden = true;
+  updateGameHud();
   const visual = new THREE.Mesh(new THREE.CapsuleGeometry(0.3,1.2,4,8),new THREE.MeshBasicMaterial({color:0x2244cc,wireframe:true}));
   visual.name = 'player'; walkHelpers.add(visual); showWalkHelpers();
   transform.detach(); transform.enabled = false; orbit.enabled = false;
   ground.visible = false; grid.visible = false;
   camera.near = 0.03; camera.updateProjectionMatrix();
   $("walkBtn").textContent = 'Back to Editor'; $("walkRespawn").hidden = false;
-  $("sceneStatus").textContent = 'WALK TEST';
+  $("sceneStatus").textContent = withGame ? 'GAME TEST' : 'WALK TEST';
   for (const id of ['walkRebuild','walkSlope','walkArea','walkStep','spawnPlace','spawnAuto','spawnX','spawnY','spawnZ','testBtn','focusBtn','groundBtn','resetTransformBtn','uniformScale','colliderShape']) $(id).disabled = true;
 }
 function stopWalk() {
   if (!walkPlayer) return;
-  walkPlayer = null; walkKeys.clear();
+  walkPlayer = null; walkKeys.clear(); gameSession = null;
+  gameplayEditor.lock(false); gameplayEditor.sync();
+  $('gameBtn').disabled = false; $('gameHud').hidden = true; $('gameWin').hidden = true;
   const visual = walkHelpers.getObjectByName('player'); walkHelpers.remove(visual); cleanNode(visual);
   camera.position.copy(walkView.position); orbit.target.copy(walkView.target);
   camera.near = walkView.near; camera.far = walkView.far; camera.updateProjectionMatrix();
@@ -978,11 +1006,20 @@ function stopWalk() {
 }
 function updateWalk(dt) {
   if (!walkPlayer) return;
+  if (gameSession?.won) { updateGameHud(); return; }
   let x = Number(walkKeys.has('d') || walkKeys.has('arrowright'))-Number(walkKeys.has('a') || walkKeys.has('arrowleft'));
   let z = Number(walkKeys.has('s') || walkKeys.has('arrowdown'))-Number(walkKeys.has('w') || walkKeys.has('arrowup'));
   const length = Math.hypot(x,z) || 1; x/=length; z/=length;
   walkAccumulator += dt;
-  while (walkAccumulator >= 1/120) { walkPlayer.step(1/120,x,z); walkAccumulator -= 1/120; }
+  while (walkAccumulator >= 1/120) {
+    walkPlayer.step(1/120,x,z); walkAccumulator -= 1/120;
+    if (gameSession) {
+      if (gameRespawnVersion !== walkPlayer.respawnVersion) { gameSession.restart(); gameRespawnVersion = walkPlayer.respawnVersion; }
+      gameSession.tick(walkPlayer.position);
+      if (gameSession.won) { walkKeys.clear(); walkAccumulator = 0; break; }
+    }
+  }
+  if (gameSession) { gameplayEditor.sync(gameSession); updateGameHud(); }
   const p = walkPlayer.position;
   walkHelpers.getObjectByName('player').position.copy(p).y += 0.9;
   // Fixed world-axis chase camera: no pointer lock required.
@@ -990,9 +1027,27 @@ function updateWalk(dt) {
   camera.lookAt(p.clone().add(new THREE.Vector3(0,1,0)));
   $("walkTelemetry").textContent = `Player: ${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)} · ${walkPlayer.grounded ? 'grounded' : 'falling'}`;
 }
+function updateGameHud() {
+  if (!gameSession) return;
+  $('gameHudCount').textContent = `Collectibles: ${gameSession.collected.size} / ${gameSession.total}`;
+  $('gameHudTime').textContent = `Time: ${gameSession.elapsed.toFixed(1)} s`;
+  $('gameHudObjectives').textContent = gameSession.objectives.size ? `Objectives complete: ${[...gameSession.objectives].join(' · ')}` : 'Objectives complete: 0';
+  $('gameMessage').textContent = gameSession.message;
+  $('gameWin').hidden = !gameSession.won;
+  $('gameWinStats').textContent = `${gameSession.elapsed.toFixed(1)} s · Collectibles: ${gameSession.collected.size} / ${gameSession.total}`;
+}
+$('gameBtn').onclick = () => startWalk(true);
+for (const id of ['gameRestart','gameWinRestart']) $(id).onclick = respawnWalk;
+for (const id of ['gameExit','gameWinExit']) $(id).onclick = stopWalk;
 $('walkRebuild').onclick = rebuildWalk;
 $('walkBtn').onclick = () => walkPlayer ? stopWalk() : startWalk();
-function respawnWalk() { if (walkPlayer) { walkPlayer.respawn(); updateWalk(0); } }
+function respawnWalk() {
+  if (!walkPlayer) return;
+  walkPlayer.respawn(); walkKeys.clear(); walkAccumulator = 0;
+  gameRespawnVersion = walkPlayer.respawnVersion;
+  if (gameSession) { gameSession.restart(); gameplayEditor.sync(gameSession); $('gameWin').hidden = true; updateGameHud(); }
+  updateWalk(0);
+}
 $('walkRespawn').onclick = respawnWalk;
 for (const id of ['walkSurfaces','walkColliders','walkMarkers']) $(id).onchange = showWalkHelpers;
 for (const id of ['walkSlope','walkArea','walkStep']) $(id).onchange = rebuildWalk;
@@ -1131,6 +1186,7 @@ window.addEventListener("keydown", (e) => {
 });
 if (import.meta.env.DEV)
   window.agcDebug = {
+    get gameplay() { return { editor: gameplayEditor, session: gameSession }; },
     get walk() { return { data: walkData, player: walkPlayer }; },
     get objects() {
       return objects;

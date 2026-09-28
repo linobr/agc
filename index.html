@@ -135,6 +135,16 @@
                 DRAG TO ORBIT <span>·</span> SCROLL TO ZOOM
               </div>
             </div>
+            <div id="gameHud" class="game-hud" hidden>
+              <strong>GAME TEST</strong><span id="gameHudCount"></span><span id="gameHudTime"></span>
+              <span id="gameHudObjectives"></span><p id="gameMessage" role="status"></p>
+              <button id="gameRestart" class="quiet-button">Restart</button><button id="gameExit" class="quiet-button">Back to Editor</button>
+            </div>
+            <div id="gameWin" class="game-win" hidden role="dialog" aria-label="Game complete">
+              <div><h2>Game complete!</h2><p id="gameWinStats"></p>
+              <button id="gameWinRestart" class="primary-button">Restart game</button>
+              <button id="gameWinExit" class="quiet-button">Back to Editor</button></div>
+            </div>
             <div id="testBanner" class="test-banner" hidden>
               <span class="live-dot"></span> PHYSICS TEST
               <small>Drag an object to grab · release to drop</small
@@ -310,6 +320,26 @@
                 Collider bounds are simplified. Scan holes and surface detail
                 are not represented.
               </p>
+            </section>
+            <section class="panel-section">
+              <div class="section-title">GAMEPLAY <span id="gameCount">0/100</span></div>
+              <fieldset id="gameEditorFields">
+                <button id="addTrigger" class="quiet-button">Add Trigger</button>
+                <button id="addGoal" class="quiet-button">Add Goal</button>
+                <button id="addCollectible" class="quiet-button">Add Collectible</button>
+                <select id="gameObjectSelect" aria-label="Gameplay objects"></select>
+                <div id="gameProperties" hidden>
+                  <label class="field-label">Name<input id="gameName" maxlength="100" /></label>
+                  <div class="vector-field"><label>Position (world axes)</label><div><span>X</span><input id="game-position-x" type="number" step="0.1" aria-label="Gameplay position x" /><span>Y</span><input id="game-position-y" type="number" step="0.1" aria-label="Gameplay position y" /><span>Z</span><input id="game-position-z" type="number" step="0.1" aria-label="Gameplay position z" /></div></div>
+                  <div class="vector-field"><label>Size (world axes)</label><div><span>X</span><input id="game-size-x" type="number" step="0.1" aria-label="Gameplay size x" /><span>Y</span><input id="game-size-y" type="number" step="0.1" aria-label="Gameplay size y" /><span>Z</span><input id="game-size-z" type="number" step="0.1" aria-label="Gameplay size z" /></div></div>
+                  <label class="walk-toggle"><input id="gameEnabled" type="checkbox" /> Active at start</label>
+                  <div id="gameGoalOptions" hidden><label class="walk-toggle"><input id="gameRequireAll" type="checkbox" /> Require all collectibles</label></div>
+                  <div id="gameRuleSection"><div id="gameRules"></div><button id="gameAddRule" class="quiet-button">Add rule</button></div>
+                  <button id="gameDelete" class="quiet-button">Delete gameplay object</button>
+                </div>
+              </fieldset>
+              <p class="fine-print">Blue: trigger · Green: goal · Gold: collectible. Non-solid, axis-aligned volumes. Select here or click in the scene; edit position and size above.</p>
+              <button id="gameBtn" class="primary-button">Game Test</button>
             </section>
             <section class="panel-section">
               <div class="section-title">WALK TEST · MVP</div>

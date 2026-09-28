@@ -2,7 +2,7 @@
 
 Stand: 2026-09-28. Repo `linobr/agc`.
 
-- `main` enthält die Erweiterung um verbundene Regionen, Step-Up, manuellen Spawn und Projektformat v2 (aktueller Abschnitt unten). Der erste Walk-Test-MVP bleibt als Release `v1.0.0` auf `6594030` erhalten.
+- Aktueller Entwicklungsstand: No-Code-Gameplay mit Triggern, Collectibles, Zielen und Projektformat v3 (aktueller Abschnitt unten). Walkability bleibt als Release `v1.1.0-walkability` exakt auf `b9af19e` gesichert; der erste Walk-Test als `v1.0.0` auf `6594030`.
 - Öffentliche App: **https://linobr.github.io/agc/**. Das Pages-Deployment mit `67e84f6` wurde erfolgreich getestet.
 - Git-Strategie: `main` ist der aktuelle funktionierende und geprüfte Source-Stand. Featurebranches nur temporär für konkrete Arbeiten; wichtige stabile Wiederherstellungspunkte zusätzlich mit Tags / GitHub Releases markieren. Secrets, Runtime- und private Nutzerdaten bleiben außerhalb von Git und Releases.
 
@@ -50,7 +50,7 @@ Nur Dokumentation und `package.json`-Homepage aktualisiert; keine Funktions- ode
 
 ## Bekannte Grenzen / nächste Schritte
 
-- Original-GLB bleibt für Scanprojekte notwendig; kein Autosave, nur ein Scan gleichzeitig; v1-Projekte werden jetzt zu v2 migriert.
+- Original-GLB bleibt für Scanprojekte notwendig; kein Autosave, nur ein Scan gleichzeitig; v1/v2-Projekte werden jetzt zu v3 migriert.
 - Ohne Web Crypto ist die Scanreferenz nur durch Dateiname/Größe geprüft. Projekte mit SHA-256 verlangen HTTPS oder localhost; fehlende Prüfmöglichkeit führt zu einem verständlichen Fehler.
 - Nur selbständige GLB-Dateien; externe Textur-/Bufferreferenzen werden abgewiesen.
 - Physics Test behält grobe Boxen; Walk Test nutzt statische Dreiecke. Keine reparierten oder garantiert begehbaren Scanflächen.
@@ -100,3 +100,23 @@ Jeweils eine zusammenhängende Region. Phasenmediane addieren sich nicht zwingen
 Abnahme: **21/21 Playwright-Tests bestanden**, einschließlich aller bisherigen elf (die Export-Versionserwartung wurde auf v2 aktualisiert). Neue Abdeckung: Inseln/übereinanderliegende Böden, Hauptregion, kleine Dreiecke, Duplikate/Nahtnähe, Slope-Filter und Rampenbewegung, niedrige/hohe Stufe, fehlende Kopffreiheit, manueller/ungültiger Spawn, Place-Spawn-Klickmodus, v2-Roundtrip, v1-Migration und ungültige v2-Werte; außerdem 10k/50k/100k-Strukturprüfungen ohne Zeit-Assertions.
 
 `npm run build` erfolgreich (ca. 739 kB JS / 193 kB gzip, bekannte Chunkgrößenwarnung), `npm audit --audit-level=moderate` ohne Schwachstellen und `git diff --check` sauber. Produktions-Smoke am lokalen Preview: HTTP 200, keine JS/CSS-Fehler; Regionen, manueller/ungültiger Spawn, Bodenhaftung, Bewegung, Respawn, v2-Save/Open und niedrige Stufe über echte Tastatureingabe erfolgreich, ohne Produktions-Debug-API. Produktionsansicht visuell geprüft. Screenshots/Downloads bleiben in ignorierten Testausgaben.
+
+
+## No-Code-Gameplay und Projekt v3 — 28.09.2026
+
+- Vor Änderungen: sauberer `main`, `git pull --ff-only origin main`, bestätigter HEAD `b9af19ea672fa1dbd0ec4daeca75156c320cf622`. Auf ausdrücklichen Wunsch als **[v1.1.0-walkability](https://github.com/linobr/agc/releases/tag/v1.1.0-walkability)** veröffentlicht. Zurückgeholter Tag zeigt exakt auf diesen Commit. Keine privaten Scans, gespeicherten Projekte oder zusätzlichen Assets angehängt. Gameplay-Entwicklung direkt auf `main`.
+- **Gameplay Objects:** Trigger (blau), Goal (grün), Collectible (gold). Eigener Inspector mit Dropdown/Scene-Picking, Name, Weltposition, XYZ-Größe, Aktivierung beim Start und Löschen. Einfache lokale Shapes; keine neuen Asset-/Bibliotheksabhängigkeiten. Gameplay bleibt separat von `objects[]`, Scan-Normalenanalyse und physikalischen Collidern.
+- **Regeln:** Enter/Leave auf Triggern, Collected auf Items. Definierte Actions: Show Message, Activate, Deactivate, Complete Objective, Finish Game. Bis zu acht Regeln pro Objekt, bis zu 100 Gameplay-Objekte. Targets müssen vorhandene Gameplay-IDs sein. Beim Löschen eines Targets werden referenzierende Regeln entfernt und gemeldet.
+- **Sicherheit:** strikte Feld-/Typ-/String-/Vektor-/Referenzvalidierung vor Szenenersetzung. Unbekannte Actions/Events, Code- und Laufzeitfelder werden abgewiesen. Namen/Meldungen über Text-APIs. Kein eval, Script-Parser, Netzwerk- oder Timer-Action. Kontakte werden zunächst gesammelt, danach Actions ausgeführt; Actions erzeugen keine neuen Events. Selbstreferenzen können deshalb keine rekursive Action-Schleife auslösen.
+- **Game Test:** nutzt den bestehenden WalkPlayer unverändert für Bewegung/Slope/Step; zusätzliche Gameplay-Auswertung pro festem Physikschritt. Eigenes HUD für Items, Zeit, Objective-Labels und Messages. Goal beendet beim Kontakt, optional nach allen Items. Auch anfänglich deaktivierte Items zählen zur Gesamtzahl; die Konfiguration muss sie ggf. aktivieren. Finish-Game-Regeln sind ein unabhängiger Win-Pfad.
+- **Win/Restart:** Overlay mit Zeit/Items, eingefrorener Bewegung, Restart und Editor-Rückkehr. Restart, R, Respawn und automatische Fall-Respawns setzen Items, aktive Zustände, Objectives und Zeit zurück. Zeit misst reale Sekunden inklusive verborgenem Browser-Tab. Walk Test bleibt als reiner Bewegungstest erhalten; der ursprüngliche Physics Test ebenfalls.
+- **Projekt v3:** `gameplay[]` speichert ausschließlich Definitionen/Regeln. v1 ergänzt zuerst Walk-Defaults; v1 und v2 erhalten leeres Gameplay und exportieren v3. Save während des Spiels speichert keine gesammelten Items, Win-/Zeit-/Kontaktzustände oder Aktivierungsänderungen. Open kehrt stets zum Editor und den Startdefinitionen zurück. Schema und Migration sind in `AGC_PROJECT_FORMAT.md` aktualisiert.
+- **Grenzen:** nicht feste, achsenparallele Kontaktvolumen mit Player-Bounding-Box, keine Sichtlinienprüfung (Items hinter sehr dünnen Wänden können erreichbar sein), keine Rotation dieser Volumen. Objectives sind abgeschlossene Labels, keine Abhängigkeitsgraphen. Kein eigenständiger Game-Export, Inventar, Gegner oder beliebiges Scripting. Die bisherigen Scan-/Colliderlimits bleiben bestehen. Spiele mit deaktivierten, unerreichbaren Items oder ohne Win-Pfad werden noch nicht automatisch als unlösbar erkannt.
+- **Nächster Schritt:** Spiel-Konfigurationsprüfung für fehlende/unlösbare Ziele und unerreichbare/deaktivierte Items, danach eigenständiger spielbarer Export. Worker-Analyse und repräsentative Scan-/Gerätetests bleiben Performancethemen.
+
+Neue Prüfungen verwenden ausschließlich generierte Geometrie und Inspector-Eingaben. Die Browser-Tests nutzen für genaue Kontakte teilweise das vorhandene DEV-Interface; der eigenständige Produktions-Smoke `scripts/verify-gameplay.js` benötigt keinerlei Debug-API und spielt mit echten Tastatureingaben. Er erstellt Regeln/Objekte, prüft gesperrtes Ziel, Pickup/Objective, Win, Restart, v3-Save/Open sowie anschließende Editor-Bearbeitung. Die bisherigen Tests bleiben erhalten; reine Export-Versionsassertions wurden von v2 auf v3 angepasst.
+
+
+Produktionsbuild lokal geprüft: Walk- und Gameplay-Smoke erfolgreich, HTTP 200 und keine JS/CSS-Fehler. Gameplay-Smoke durchläuft den Spielablauf mit echten WASD-Eingaben; Win-Overlay visuell geprüft. Build ca. 751 kB JS / 197 kB gzip (bekannte Chunkwarnung), Audit ohne Schwachstellen, Diff-Prüfung sauber. Der bestehende Spawn-Klicktest wurde nach einem Timingfehler stabilisiert: Bildschirmprojektion erst nach Auswahl des Spawn-Modus und mit aktualisierter Kamera-Weltmatrix. Der unveränderte Klick-/Spawn-Funktionsumfang wurde dreimal hintereinander erfolgreich geprüft; keine zusätzliche Wartezeit oder gelockerte Assertion nötig.
+
+Finaler Gesamtlauf: **28/28 Tests bestanden** (ca. 1,9 Minuten), einschließlich aller bisherigen 21 Szenarien. Neue Abdeckung: Enter/Leave und feste Actions, nicht rekursive Aktivierung, Collectible/Goal-Gating, Zeit-Freeze/Restart/Respawn, HUD und Win-Overlay, Editor-Rückkehr, v3-Roundtrip, v1/v2-Migration, Ablehnung unbekannter Actions/Codefelder/Referenzen/Übergrößen, Größenbearbeitung und Löschbereinigung. Beide lokalen Produktions-Smokes (Walk und Gameplay) sind erfolgreich. Es wurden keine privaten Scans oder Projekte für Tests/Commits verwendet.

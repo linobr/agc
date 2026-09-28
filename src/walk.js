@@ -126,7 +126,7 @@ export function analyzeWalk(entries, { slope = 40, minArea = 0.1, stepHeight = 0
 }
 export class WalkPlayer {
   constructor(data) { this.data=data; this.position=data.spawn.clone(); this.velocity=new THREE.Vector3(); this.grounded=false; this.respawn(); }
-  respawn() { this.position.copy(this.data.spawn).y += 0.35; this.velocity.set(0,0,0); this.grounded=false; this.climb=null; }
+  respawn() { this.respawnVersion = (this.respawnVersion || 0) + 1; this.position.copy(this.data.spawn).y += 0.35; this.velocity.set(0,0,0); this.grounded=false; this.climb=null; }
   step(dt, x=0, z=0) {
     const moving = Math.hypot(x,z)>0;
     // Probe across the capsule radius, but never move horizontally farther than speed*dt.

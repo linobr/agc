@@ -4,7 +4,7 @@ AGC is a local-first browser editor for turning a 3D scan into an object you can
 
 Public app: **https://linobr.github.io/agc/**. `main` contains the editor, Save/Open Project and the scan Walk Test MVP.
 
-The original Walk Test MVP is preserved as [GitHub release v1.0.0](https://github.com/linobr/agc/releases/tag/v1.0.0), pinned to `6594030`. The release is a source recovery point; Pages follows `main`.
+The original Walk Test MVP is preserved as [GitHub release v1.0.0](https://github.com/linobr/agc/releases/tag/v1.0.0), pinned to `6594030`. The walkability increment is preserved as [v1.1.0-walkability](https://github.com/linobr/agc/releases/tag/v1.1.0-walkability), pinned to `b9af19e`. These releases are source recovery points; Pages follows `main`.
 
 `main` is the current working, checked source. Keep completed, checked work on `main`. Never include secrets, runtime data or private user assets in Git or releases.
 
@@ -25,6 +25,28 @@ Open `/agc/` on the dev server. The Vite build uses `/agc/` as its base path for
 - Show collider overlays to inspect the current simplified bounds. Colliders are deliberately coarse boxes; they are not a repaired scan surface or a walkable-surface guarantee.
 - The included primitives make repeatable physics checks possible without the private scan.
 
+## Make a small game without code
+
+1. Import and align a scan. Check its walkable region and spawn with **Walk Test**.
+2. In **Gameplay**, use **Add Trigger**, **Add Goal** and **Add Collectible**. They appear near the current spawn (or the world origin before a valid spawn exists).
+3. Select a gameplay object from the dropdown or by clicking it in the scene. Edit its name, world-space position and XYZ size in the Gameplay inspector. Trigger boxes are blue, goals green and collectibles gold; the selected outline is orange. **Delete gameplay object** also removes rules targeting that object, with a notice.
+4. On a trigger, **Add rule**, select **Player enters zone** or **Player leaves zone**, then an action. Collectibles offer **Collectible collected**. A message is plain text; activation actions choose another gameplay object; objective actions take a label. Multiple rules run in their displayed order, up to eight per object.
+5. Goals finish the game on contact. Enable **Require all collectibles** to lock the goal until every defined collectible is collected. This includes initially inactive collectibles: add an activation rule if you intend to use them. Gold items disappear when collected. A locked goal has an orange outline during play.
+6. Click **Game Test**. Movement, slope/step handling and spawn validation are shared with Walk Test. The HUD shows collected/total, completed objective labels, elapsed seconds and rule messages. On success the game freezes and displays time/count plus **Restart game** and **Back to Editor**.
+7. **Restart**, **Respawn**, **R**, or an automatic fall respawn restores every item, activation flag, objective and timer. **Esc** returns to the editor. Save Project to keep the authored configuration; no runtime progress is exported.
+
+The separate **Walk Test** remains a movement/collision diagnostic without gameplay events; **Test scene** remains the original rigid-body test. Gameplay editing is locked while any test is running. Gameplay objects are separate, non-solid, axis-aligned volumes; changing them does not rebuild or modify scan collision. Position is the volume center and size is its full XYZ extent. A player-sized bounding box determines contact, so a trigger can fire near a volume edge and a collectible can be reached through a very thin wall; there is no line-of-sight test.
+
+Allowed actions are **Show message**, **Activate object**, **Deactivate object**, **Mark objective complete**, and **Finish game**. Targets are gameplay objects only, not scan/physics meshes. Objective completion is an idempotent set of labels shown in the HUD; it is not an additional goal prerequisite. A Finish game rule is an independent win path and can intentionally bypass a goal's collectible requirement.
+
+### Rule safety and deterministic behavior
+
+At most 100 gameplay objects and eight rules per object. Names/objective labels are limited to 100 characters, messages to 500; sizes are 0.1–100 m per axis. Projects validate known types, field sets, unique IDs and existing target references before replacing the current scene. Executable/unknown gameplay fields and persisted runtime fields are rejected. Messages/names are rendered as text. There is no JavaScript action, expression parser, `eval`, network action or timer action.
+
+Each fixed physics step first snapshots contacts/active flags and gathers enter, leave and collected events. It then executes matching actions in object/rule order, then checks goals. Actions do not emit events, so activation references (even self-references) cannot recursively execute. Activating a trigger while the player is already inside does not create an enter event: leave and re-enter to fire it. A player starting inside an active zone counts as entering on the first step. Pickups fire once per run, and reactivating a collected item does not uncollect it. A final pickup while already inside an active goal unlocks that goal immediately. Time measures wall-clock seconds since restart, including time while the tab is hidden, and freezes on success.
+
+This is a game-authoring MVP: no arbitrary scripting, object rotation for trigger volumes, nested objectives, moving platforms, inventory, enemies, scoring system or standalone game export. Invalid geometric spawn still blocks Game Test. The existing scan limits apply.
+
 ## Save and reopen a project
 
 **Save Project** downloads `scene.agc`, a versioned JSON settings file. Keep the
@@ -36,14 +58,16 @@ opening** keeps the current scene. Empty and primitive-only projects open direct
 
 Transforms, object names, primitive colors, body behavior, collider shape and
 visibility, reset transforms, selection, active tool and camera are restored.
-Project v2 additionally stores slope limit, step height, minimum region area and
-spawn mode/coordinates. Version-1 projects load with defaults and export as v2.
+Project v3 stores slope limit, step height, minimum region area, spawn mode/coordinates
+and gameplay definitions/rules. Version-1 and version-2 projects migrate to v3.
+Collected items, completed objectives, enabled overrides, time and win state are
+never saved; opening always restores the authored starting state.
 Export during a physics test saves the edited starting transforms, not a transient
 simulation position. Opening always returns to editor mode. As in the original
 MVP, starting a physics test sets the transform-reset baseline to the edited start.
 
 There is no autosave. Export again after edits; keep both `.agc` and the GLB as
-your backup. See [the v2 format specification (with v1 migration)](AGC_PROJECT_FORMAT.md) for limits,
+your backup. See [the v3 format specification (with v1/v2 migration)](AGC_PROJECT_FORMAT.md) for limits,
 validation and the decision against embedding large scans.
 
 ## Prototype limits
@@ -52,7 +76,7 @@ This is an editor MVP, not a game engine. It handles one GLB at a time and uses 
 
 The user's Scaniverse palm is a local-only test file and is not included in this repository. Do not commit private uploads, derived assets, credentials, browser recordings or runtime data.
 
-Next recommended development step: move analysis into a cancellable worker, then test representative room scans on target hardware and add explicit region selection/navigation links.
+Next recommended development step: a game validation/readiness panel (unreachable or inactive items, missing win condition), followed by a standalone playable export. Cancellable scan analysis in a worker and real-device scan tests remain performance priorities.
 
 ## Checks
 
@@ -110,7 +134,7 @@ Hard limits remain **100,000 input triangles**, **500,000 triangle–cell refere
 
 Run the reproducible synthetic-grid benchmark with `node scripts/benchmark-walk.js`. It measures extraction/walkability, region construction and collider indexing separately, plus total analysis including spawn search. Three runs per size, median per phase, no CI timing threshold. The Playwright suite also checks 10k/50k/100k cases for valid results and bounded structures. Benchmark measurements for this increment are recorded in [AGC_PROGRESS.md](AGC_PROGRESS.md).
 
-**Show Walkable**, **Show Collision** and **Show Spawn / Player** toggle the derived overlays. The old **Colliders** button still shows Physics Test bounds. Regions, collision structures, overlays and player state are not serialized; they are rebuilt from the original scan. Project v2 persists the walk settings and spawn, with documented defaults for v1.
+**Show Walkable**, **Show Collision** and **Show Spawn / Player** toggle the derived overlays. The old **Colliders** button still shows Physics Test bounds. Regions, collision structures, overlays and player state are not serialized; they are rebuilt from the original scan. Project v3 persists walk settings, spawn and gameplay definitions, with migration from v1/v2.
 
 Known difficult inputs: inverted winding, unsupported animated/instanced meshes, large holes, sub-millimetre noise, steep or rough slopes, thin ledges, vegetation, overlapping/non-manifold geometry, wrong scale and enclosed spaces without headroom. The heuristics deliberately prefer rejecting an uncertain start over claiming a repaired scan.
 
@@ -122,3 +146,12 @@ node scripts/verify-production.js https://linobr.github.io/agc/
 ```
 
 It verifies HTTP 200, JS/CSS responses, editor startup, synthetic scan import, walking, ground contact, respawn and return to the editor without a production debug API.
+
+No-code gameplay production smoke (real keyboard, no debug API):
+
+```sh
+node scripts/verify-gameplay.js http://127.0.0.1:4189/agc/
+node scripts/verify-gameplay.js https://linobr.github.io/agc/
+```
+
+It authors a trigger, gated goal and collectible through the inspector, plays through pickup/win, restarts, saves/reopens v3, and returns to an editable scene using only a generated local scan.

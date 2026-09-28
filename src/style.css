@@ -1133,3 +1133,13 @@ button {
 }
 #walkStatus, #walkTelemetry { font-size: 12px; line-height: 1.5; }
 #walkRegions, #walkTiming, #spawnStatus { font-size: 11px; line-height: 1.5; }
+#gameEditorFields { border: 0; padding: 0; margin: 0; min-width: 0; }
+#gameObjectSelect, .game-rule select, .game-rule input { width: 100%; margin: 5px 0; padding: 7px; border: 1px solid #d6ddd5; background: #fff; border-radius: 5px; font: inherit; }
+.game-rule { padding: 8px; margin: 8px 0; border: 1px solid #d6ddd5; border-radius: 6px; }
+.game-hud { position: absolute; left: 16px; top: 16px; z-index: 12; background: #fffffff0; padding: 12px; border-radius: 8px; max-width: min(460px, 85%); font-size: 12px; }
+.game-hud > span { display: block; margin-top: 4px; }
+#gameMessage { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 100px; overflow: auto; }
+#gameHudObjectives { max-height: 70px; overflow: auto; overflow-wrap: anywhere; }
+.game-win { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; background: #183425aa; }
+.game-win > div { padding: 28px; border-radius: 10px; background: #fff; text-align: center; }
+.game-win[hidden], .game-hud[hidden] { display: none; }
