@@ -4,6 +4,7 @@ import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import * as CANNON from "cannon-es";
 import "./style.css";
+import { MAX_PROJECT_BYTES, MAX_GLB_BYTES, fileName, scanMetadata, parseProject, serializePose, restorePose } from "./project.js";
 
 const $ = (id) => document.getElementById(id);
 const canvas = $("sceneCanvas"),
@@ -75,7 +76,8 @@ let objects = [],
   dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
   dragOffset = new THREE.Vector3(),
   loadToken = 0,
-  toastTimer;
+  toastTimer,
+  pendingProject = null;
 const raycaster = new THREE.Raycaster(),
   pointer = new THREE.Vector2(),
   planeHit = new THREE.Vector3();
@@ -214,6 +216,7 @@ function addEntry(root, name, kind = "model") {
   focus(entry);
   refreshCollider(entry);
   syncInspector();
+  return entry;
 }
 function removeEntry(entry) {
   if (!entry) return;
@@ -230,102 +233,236 @@ function removeEntry(entry) {
   }
   updateStats();
 }
-function importFile(file) {
+function projectMessage(message) {
+  $("projectStatus").textContent = message;
+}
+function clearPendingProject() {
+  pendingProject = null;
+  $("chooseProjectScan").hidden = true;
+  $("cancelProject").hidden = true;
+}
+function readScan(file, token) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onprogress = (event) => {
+      if (token !== loadToken || !event.lengthComputable) return;
+      $("progressBar").style.width = `${20 + (event.loaded / event.total) * 45}%`;
+      $("loadProgress").textContent = `Reading model · ${Math.round(event.loaded / 1048576)} / ${Math.ceil(event.total / 1048576)} MB`;
+    };
+    reader.onerror = () => reject(new Error("The file could not be read. Try selecting it again."));
+    reader.onload = () => {
+      if (token === loadToken) {
+        $("progressBar").style.width = "72%";
+        $("loadProgress").textContent = "Checking and decoding mesh and materials…";
+      }
+      resolve(reader.result);
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+function showLoading(message) {
+  $("loadingOverlay").hidden = false;
+  $("loadProgress").textContent = message;
+  $("progressBar").style.width = "50%";
+}
+async function decodeGLB(bytes) {
+  // Local-only models must not fetch external textures or buffers.
+  const view = new DataView(bytes);
+  if (bytes.byteLength < 20 || view.getUint32(0, true) !== 0x46546c67 ||
+      view.getUint32(4, true) !== 2 || view.getUint32(8, true) !== bytes.byteLength ||
+      view.getUint32(16, true) !== 0x4e4f534a)
+    throw new Error("Expected a complete binary GLB version 2 file.");
+  const jsonLength = view.getUint32(12, true);
+  const json = JSON.parse(new TextDecoder().decode(new Uint8Array(bytes, 20, jsonLength)));
+  for (const resource of [...(json.buffers || []), ...(json.images || [])]) {
+    if (resource.uri && !resource.uri.startsWith("data:"))
+      throw new Error("GLB must contain its textures and buffers; external file references are unsupported.");
+  }
+  const gltf = await new GLTFLoader().parseAsync(bytes, "");
+  try { boundsFor(gltf.scene); localBoundsFor(gltf.scene); }
+  catch (error) { cleanNode(gltf.scene); throw error; }
+  return gltf.scene;
+}
+async function importFile(file) {
   if (!file) return;
-  if (
-    !file.name.toLowerCase().endsWith(".glb") &&
-    file.type !== "model/gltf-binary"
-  ) {
+  if (!file.name.toLowerCase().endsWith(".glb")) {
     notify("Unsupported file. Choose a binary .glb model.");
     return;
   }
-  if (file.size > 250 * 1024 * 1024) {
+  if (file.size > MAX_GLB_BYTES) {
     notify("This prototype supports GLB files up to 250 MB.");
     return;
   }
   const token = ++loadToken;
-  $("loadingOverlay").hidden = false;
-  $("loadProgress").textContent = `Reading ${file.name}`;
-  $("progressBar").style.width = "16%";
-  const reader = new FileReader();
-  reader.onprogress = (e) => {
-    if (e.lengthComputable && token === loadToken) {
-      const pct = Math.round(20 + (e.loaded / e.total) * 45);
-      $("progressBar").style.width = `${pct}%`;
-      $("loadProgress").textContent =
-        `Reading model · ${Math.round(e.loaded / 1048576)} / ${Math.ceil(e.total / 1048576)} MB`;
-    }
-  };
-  reader.onerror = () => {
-    if (token === loadToken) {
-      $("loadingOverlay").hidden = true;
-      notify("The file could not be read. Try another GLB.");
-    }
-  };
-  reader.onload = () => {
+  clearPendingProject();
+  showLoading(`Reading ${fileName(file.name)}`);
+  let root;
+  try {
+    const bytes = await readScan(file, token);
     if (token !== loadToken) return;
-    $("progressBar").style.width = "72%";
-    $("loadProgress").textContent = "Decoding mesh and materials…";
-    try {
-      new GLTFLoader().parse(
-        reader.result,
-        "",
-        (gltf) => {
-          if (token !== loadToken) {
-            cleanNode(gltf.scene);
-            return;
-          }
-          try {
-            boundsFor(gltf.scene);
-            for (const old of [...objects].filter((o) => o.kind === "model"))
-              removeEntry(old);
-            addEntry(gltf.scene, file.name.replace(/\.glb$/i, ""));
-            $("loadingOverlay").hidden = true;
-            $("progressBar").style.width = "0%";
-            notify(`Imported ${file.name} · ${objects.at(-1).meshes} meshes`);
-          } catch (e) {
-            cleanNode(gltf.scene);
-            $("loadingOverlay").hidden = true;
-            notify(`Could not use this model: ${e.message}`);
-          }
-        },
-        (err) => {
-          if (token === loadToken) {
-            $("loadingOverlay").hidden = true;
-            $("progressBar").style.width = "0%";
-            notify(
-              `GLB decode failed: ${err?.message || "file may be incomplete or invalid"}`,
-            );
-          }
-        },
-      );
-    } catch (err) {
-      $("loadingOverlay").hidden = true;
-      $("progressBar").style.width = "0%";
-      notify(
-        `GLB decode failed: ${err?.message || "file may be incomplete or invalid"}`,
-      );
-    }
-  };
-  reader.readAsArrayBuffer(file);
+    const source = await scanMetadata(file, bytes);
+    if (token !== loadToken) return;
+    root = await decodeGLB(bytes);
+    if (token !== loadToken) { cleanNode(root); return; }
+    resetTest();
+    for (const old of [...objects].filter((o) => o.kind === "model")) removeEntry(old);
+    const entry = addEntry(root, fileName(file.name).replace(/\.glb$/i, ""));
+    entry.source = source;
+    projectMessage("Scan imported. Save Project downloads settings; keep the original GLB. No autosave.");
+    notify(`Imported ${source.fileName} · ${entry.meshes} meshes`);
+  } catch (error) {
+    if (token === loadToken) notify(`GLB decode failed: ${error.message}`);
+  } finally {
+    if (token === loadToken) $("loadingOverlay").hidden = true;
+  }
+}
+function primitiveRoot(color = new THREE.Color().setHSL(Math.random() * 0.12 + 0.34, 0.27, 0.63)) {
+  const root = new THREE.Group();
+  root.add(new THREE.Mesh(
+    new THREE.BoxGeometry(1, 1, 1),
+    new THREE.MeshStandardMaterial({ color, roughness: 0.48, metalness: 0.05 }),
+  ));
+  return root;
 }
 function addPrimitive() {
-  const root = new THREE.Group();
-  const mesh = new THREE.Mesh(
-    new THREE.BoxGeometry(1, 1, 1),
-    new THREE.MeshStandardMaterial({
-      color: new THREE.Color().setHSL(Math.random() * 0.12 + 0.34, 0.27, 0.63),
-      roughness: 0.48,
-      metalness: 0.05,
-    }),
-  );
-  root.add(mesh);
-  addEntry(
-    root,
-    `Test box ${objects.filter((o) => o.kind === "primitive").length + 1}`,
-    "primitive",
-  );
+  if (!$("loadingOverlay").hidden) return;
+  resetTest();
+  addEntry(primitiveRoot(), `Test box ${objects.filter((o) => o.kind === "primitive").length + 1}`, "primitive");
   notify("Test box added. Select Physics to try it.");
+}
+function saveProject() {
+  if (!$("loadingOverlay").hidden || pendingProject) {
+    projectMessage("Finish or cancel opening the current file before saving.");
+    return;
+  }
+  try {
+    const project = {
+      format: "agc-project", version: 1,
+      objects: objects.map((o) => ({
+        id: o.id, name: o.name, kind: o.kind,
+        bodyType: o.bodyType, collider: o.collider,
+        transform: serializePose(testMode ? o.initial : o.root),
+        initial: serializePose(o.initial),
+        ...(o.kind === "model" ? { source: { fileName: o.source.fileName, byteLength: o.source.byteLength, sha256: o.source.sha256 } } : { color: `#${o.root.children[0].material.color.getHexString()}` }),
+      })),
+      editor: {
+        selectedId: selected?.id || null, tool, collidersVisible,
+        camera: { position: camera.position.toArray(), target: orbit.target.toArray(), near: camera.near, far: camera.far },
+      },
+    };
+    const text = JSON.stringify(project, null, 2);
+    parseProject(text); // Never export state this version cannot open.
+    const blob = new Blob([text], { type: "application/json" });
+    if (blob.size > MAX_PROJECT_BYTES) throw new Error("Project exceeds the 2 MB settings limit.");
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "scene.agc";
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    projectMessage(`Project exported. ${objects.some((o) => o.kind === "model") ? "Keep the original GLB beside scene.agc; you will need it to reopen." : "Primitive geometry is included as settings."} No autosave.`);
+  } catch (error) { projectMessage(`Could not save project: ${error.message}`); }
+}
+async function openProject(file) {
+  if (!file) return;
+  const token = ++loadToken;
+  clearPendingProject();
+  showLoading("Reading project settings…");
+  try {
+    if (file.size > MAX_PROJECT_BYTES) throw new Error("AGC project settings must be smaller than 2 MB.");
+    const project = parseProject(await file.text());
+    if (token !== loadToken) return;
+    const model = project.objects.find((o) => o.kind === "model");
+    if (model) {
+      pendingProject = project;
+      $("chooseProjectScan").hidden = false;
+      $("cancelProject").hidden = false;
+      projectMessage(`Choose original GLB: ${model.source.fileName} (${model.source.byteLength} bytes). The scan is not embedded. Your current scene remains until loading succeeds. ${model.source.sha256 ? "SHA-256 will verify the scan." : "Filename and size only: this project has no checksum."}`);
+    } else applyProject(project);
+  } catch (error) {
+    if (token === loadToken) projectMessage(`Could not open project: ${error.message}`);
+  } finally {
+    if (token === loadToken) $("loadingOverlay").hidden = true;
+  }
+}
+async function openProjectScan(file) {
+  if (!file || !pendingProject) return;
+  const project = pendingProject;
+  const source = project.objects.find((o) => o.kind === "model").source;
+  const token = ++loadToken;
+  showLoading("Checking original scan…");
+  let root;
+  try {
+    if (file.size !== source.byteLength || fileName(file.name) !== source.fileName)
+      throw new Error(`Choose ${source.fileName} with exactly ${source.byteLength} bytes.`);
+    const bytes = await readScan(file, token);
+    if (token !== loadToken) return;
+    const metadata = await scanMetadata(file, bytes);
+    if (token !== loadToken) return;
+    if (source.sha256 && !metadata.sha256)
+      throw new Error("Checksum verification requires HTTPS or localhost. Open the editor there and try again.");
+    if (source.sha256 && metadata.sha256 !== source.sha256)
+      throw new Error("The scan checksum does not match. Choose the original, unchanged GLB.");
+    root = await decodeGLB(bytes);
+    if (token !== loadToken) { cleanNode(root); return; }
+    applyProject(project, root);
+  } catch (error) {
+    if (token === loadToken) projectMessage(`Could not open project: ${error.message} The current scene is unchanged; retry or cancel.`);
+  } finally {
+    if (token === loadToken) $("loadingOverlay").hidden = true;
+  }
+}
+function applyProject(project, modelRoot = null) {
+  const prepared = [];
+  try {
+    // Validate geometry and transformed bounds before replacing the current scene.
+    for (const data of project.objects) {
+      const root = data.kind === "model" ? modelRoot : primitiveRoot(data.color);
+      prepared.push({ data, root });
+      restorePose(root, data.initial);
+      boundsFor(root);
+      restorePose(root, data.transform);
+      boundsFor(root);
+      localBoundsFor(root);
+    }
+  } catch (error) {
+    for (const { root } of prepared) cleanNode(root);
+    if (modelRoot && !prepared.some(({ root }) => root === modelRoot)) cleanNode(modelRoot);
+    throw error;
+  }
+  resetTest();
+  for (const entry of [...objects]) removeEntry(entry);
+  collidersVisible = project.editor.collidersVisible;
+  $("colliderToggle").classList.toggle("on", collidersVisible);
+  for (const { data, root } of prepared) {
+    const entry = addEntry(root, data.name, data.kind);
+    entry.id = data.id;
+    entry.source = data.source;
+    entry.bodyType = data.bodyType;
+    entry.collider = data.collider;
+    entry.initial = {
+      position: new THREE.Vector3().fromArray(data.initial.position),
+      quaternion: new THREE.Quaternion().fromArray(data.initial.quaternion),
+      scale: new THREE.Vector3().fromArray(data.initial.scale),
+    };
+    restorePose(root, data.transform);
+    refreshCollider(entry);
+  }
+  setTool(project.editor.tool);
+  select(objects.find((o) => o.id === project.editor.selectedId) || null);
+  updateStats();
+  // Clear pending orbit damping before restoring the saved view.
+  orbit.enableDamping = false;
+  orbit.update();
+  camera.position.fromArray(project.editor.camera.position);
+  orbit.target.fromArray(project.editor.camera.target);
+  camera.near = project.editor.camera.near;
+  camera.far = project.editor.camera.far;
+  camera.updateProjectionMatrix();
+  orbit.update();
+  orbit.enableDamping = true;
+  clearPendingProject();
+  projectMessage("Project opened. Editor transforms and colliders restored. No autosave; use Save Project after changes.");
 }
 function select(entry) {
   selected = entry;
@@ -354,6 +491,7 @@ function select(entry) {
     );
   $("colliderShape").value = entry?.collider || "box";
   if (entry) setCollider(entry.collider);
+  else $("collisionDimensions").textContent = "No collider yet";
   if (entry && !testMode && tool !== "select") {
     transform.attach(entry.root);
     transform.enabled = true;
@@ -777,9 +915,23 @@ $("closeHelp").addEventListener("click", () => ($("helpDialog").hidden = true));
 $("helpDialog").addEventListener("click", (e) => {
   if (e.target === $("helpDialog")) $("helpDialog").hidden = true;
 });
-$("exportBtn").addEventListener("click", () =>
-  notify("Scene export is planned for a later prototype."),
-);
+$("exportBtn").addEventListener("click", saveProject);
+$("openProjectBtn").addEventListener("click", () => $("projectInput").click());
+$("projectInput").addEventListener("change", (e) => {
+  openProject(e.target.files?.[0]);
+  e.target.value = "";
+});
+$("chooseProjectScan").addEventListener("click", () => $("projectScanInput").click());
+$("projectScanInput").addEventListener("change", (e) => {
+  openProjectScan(e.target.files?.[0]);
+  e.target.value = "";
+});
+$("cancelProject").addEventListener("click", () => {
+  ++loadToken;
+  clearPendingProject();
+  $("loadingOverlay").hidden = true;
+  projectMessage("Opening cancelled. Current scene kept. No autosave; use Save Project to keep changes.");
+});
 viewport.addEventListener("dragenter", (e) => {
   e.preventDefault();
   $("dropOverlay").classList.add("show");

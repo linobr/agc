@@ -19,6 +19,25 @@ Open `/agc/` on the dev server. The Vite build uses `/agc/` as its base path for
 - Show collider overlays to inspect the current simplified bounds. Colliders are deliberately coarse boxes; they are not a repaired scan surface or a walkable-surface guarantee.
 - The included primitives make repeatable physics checks possible without the private scan.
 
+## Save and reopen a project
+
+**Save Project** downloads `scene.agc`, a versioned JSON settings file. Keep the
+original GLB alongside it: the scan is **not embedded**. **Open Project** reads
+these settings, then **Choose original GLB** asks for the same filename and byte
+size. On HTTPS/localhost a stored SHA-256 checksum also verifies the content.
+Opening replaces the scene only after validation; a failed load or **Cancel
+opening** keeps the current scene. Empty and primitive-only projects open directly.
+
+Transforms, object names, primitive colors, body behavior, collider shape and
+visibility, reset transforms, selection, active tool and camera are restored.
+Export during a physics test saves the edited starting transforms, not a transient
+simulation position. Opening always returns to editor mode. As in the original
+MVP, starting a physics test sets the transform-reset baseline to the edited start.
+
+There is no autosave. Export again after edits; keep both `.agc` and the GLB as
+your backup. See [the v1 format specification](AGC_PROJECT_FORMAT.md) for limits,
+validation and the decision against embedding large scans.
+
 ## Prototype limits
 
 This is an editor MVP, not a game engine. It handles one GLB at a time and uses Three.js rendering plus Cannon.js rigid-body boxes. Complex scan collision is approximated by bounds, including static scans; use the overlay to judge the approximation. GLB material and texture data are preserved by the loader. Source and optimized assets can be compared later; this MVP does not silently downscale the source. WebGL speed depends on the user's GPU and scan complexity.

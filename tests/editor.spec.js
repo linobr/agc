@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
-import path from "node:path";
-const palm = "/tmp/agc-private-test/Scaniverse 2026-09-26 133931.glb";
+import { scanFile } from "./fixture.js";
+const palm = scanFile();
 test("import scan, edit transform and verify collider alignment", async ({
   page,
 }) => {
@@ -10,7 +10,7 @@ test("import scan, edit transform and verify collider alignment", async ({
   await expect(
     page.getByRole("heading", { name: /bring a scan/i }),
   ).toBeVisible();
-  await page.screenshot({ path: "artifacts/agc-start.png" });
+  await page.screenshot({ path: test.info().outputPath("start.png") });
   await page.locator("#fileInput").setInputFiles(palm);
   await expect(page.locator("#emptyState")).toBeHidden({ timeout: 60000 });
   await expect(page.locator("#meshStats")).toContainText("meshes");
@@ -18,7 +18,7 @@ test("import scan, edit transform and verify collider alignment", async ({
     "No collider yet",
   );
   await expect(page.locator("#objectName")).toHaveValue(
-    "Scaniverse 2026-09-26 133931",
+    "generated-scan",
   );
   await page.locator('[data-vector="rotation"][data-axis="y"]').fill("32");
   await page.locator('[data-vector="rotation"][data-axis="y"]').press("Tab");
@@ -26,7 +26,7 @@ test("import scan, edit transform and verify collider alignment", async ({
   await page.locator('[data-vector="scale"][data-axis="x"]').press("Tab");
   await page.locator("#colliderToggle").click();
   await expect(page.locator("#colliderToggle")).toHaveClass(/on/);
-  await page.screenshot({ path: "artifacts/agc-scan-collider.png" });
+  await page.screenshot({ path: test.info().outputPath("scan-collider.png") });
   // Object bounds and visible collision helper must agree after editing transforms.
   const alignment = await page.evaluate(() => {
     const e = window.agcDebug.selected,
@@ -49,7 +49,7 @@ test("import scan, edit transform and verify collider alignment", async ({
   }
   expect(alignment.angle).toBeLessThan(0.001);
   expect(await page.locator("#objectCount").textContent()).toBe("1");
-  await page.screenshot({ path: "artifacts/agc-scan-collider.png" });
+  await page.screenshot({ path: test.info().outputPath("scan-collider.png") });
   expect(errors).toEqual([]);
 });
 test("generated physics body falls, can be grabbed and dropped, and reset restores edited start", async ({
@@ -77,7 +77,7 @@ test("generated physics body falls, can be grabbed and dropped, and reset restor
   );
   expect(y1).toBeLessThan(y0 - 0.04);
   await page.locator("#focusBtn").click();
-  await page.screenshot({ path: "artifacts/agc-physics.png" });
+  await page.screenshot({ path: test.info().outputPath("physics.png") });
   const p = await page.evaluate(() => {
     const e = window.agcDebug.objects.at(-1);
     const v = e.root.position.clone().project(window.agcDebug.camera);
@@ -110,7 +110,7 @@ test("generated physics body falls, can be grabbed and dropped, and reset restor
   );
   expect(reset[0]).toBeCloseTo(3, 1);
   expect(reset[1]).toBeCloseTo(3, 1);
-  await page.screenshot({ path: "artifacts/agc-reset.png" });
+  await page.screenshot({ path: test.info().outputPath("reset.png") });
   expect(errors).toEqual([]);
 });
 test("repeated GLB import replaces the prior scan and malformed file reports a clear error", async ({

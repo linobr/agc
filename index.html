@@ -25,18 +25,26 @@
           ><span class="saved-pill">LOCAL</span>
         </div>
         <div class="top-actions">
+          <button id="openProjectBtn" class="quiet-button">Open Project</button>
+          <input id="projectInput" type="file" accept=".agc,.json,application/json" hidden />
           <button id="helpBtn" class="icon-button" aria-label="Help">?</button
           ><button
             id="exportBtn"
             class="quiet-button"
-            title="Export is not part of this prototype"
+            title="Save editor settings as .agc; keep the original GLB to reopen"
           >
-            Export <span>↗</span></button
+            Save Project <span>↗</span></button
           ><button id="testBtn" class="primary-button">
             <span class="play-icon">▶</span> Test scene
           </button>
         </div>
       </header>
+      <div class="project-notice">
+        <span id="projectStatus" role="status">Save Project downloads settings only. Keep the original GLB to reopen. No autosave.</span>
+        <button id="chooseProjectScan" hidden>Choose original GLB</button>
+        <button id="cancelProject" hidden>Cancel opening</button>
+        <input id="projectScanInput" type="file" accept=".glb,model/gltf-binary" hidden />
+      </div>
       <main class="workspace">
         <aside class="left-rail">
           <div class="rail-label">SCENE</div>

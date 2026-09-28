@@ -6,7 +6,7 @@ export default defineConfig({
   fullyParallel: false,
   reporter: "list",
   use: {
-    baseURL: "http://127.0.0.1:4187/agc/",
+    baseURL: "http://127.0.0.1:4188/agc/",
     headless: true,
     viewport: { width: 1440, height: 900 },
     launchOptions: {
@@ -21,9 +21,9 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   webServer: {
-    command: "npm run dev -- --port 4187 --host 127.0.0.1",
-    url: "http://127.0.0.1:4187/agc/",
-    reuseExistingServer: !process.env.CI,
+    command: "npm run dev -- --port 4188 --host 127.0.0.1",
+    url: "http://127.0.0.1:4188/agc/",
+    reuseExistingServer: false,
     timeout: 30000,
   },
 });

@@ -1100,3 +1100,20 @@ button {
     height: 43px;
   }
 }
+
+.project-notice {
+  padding: 8px 22px;
+  background: #eff6f0;
+  color: #426b50;
+  font-size: 11px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.project-notice span { flex: 1; }
+.project-notice button {
+  border: 1px solid #a2b7a4;
+  border-radius: 4px;
+  background: white;
+  padding: 4px 8px;
+}

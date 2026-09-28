@@ -1,24 +1,55 @@
-# AGC MVP — Arbeitsstand
+# AGC — Arbeitsstand
 
-Stand: 2026-09-28. Separat geklontes öffentliches Repo `linobr/agc`, Branch `jarvis/agc-mvp-20260928`, Basis und unverändertes `main`: `dca95ac87dd7ec20547ca4344fc62ef8ce37a657`. Keine Pushes, Merges oder Deployments.
+Stand: 2026-09-28. Repo `linobr/agc`.
 
-## MVP umgesetzt
+- Gesicherter MVP: `jarvis/agc-mvp-20260928`, Commit `0c80cba6a50fec2544b68d7fe4b222dc0f1fbd0c`.
+- Weiterentwicklung: `jarvis/agc-project-save-load-20260928`, direkt auf diesem MVP aufgebaut.
+- `main` bleibt bei `dca95ac87dd7ec20547ca4344fc62ef8ce37a657`. Kein Merge, Force-Push oder Deployment.
 
-- Lokaler Browsereditor auf Vite-Basis `/agc/`: Three.js-Studioansicht, Orbit-Kamera, Raster, Fokus, GLB-Dateiauswahl/Drag-and-drop, Ladefortschritt und verständliche Parserfehler.
+## Neu: Projekte speichern und wieder öffnen
+
+- **Save Project** lädt `scene.agc` als lokale JSON-Datei herunter.
+- **Open Project** validiert die Einstellungen und fordert bei Scanprojekten ausdrücklich die ursprüngliche GLB an. Dateiname und Bytezahl werden geprüft, auf HTTPS/localhost zusätzlich SHA-256. Abbrechen und fehlerhafte Dateien erhalten die bestehende Szene.
+- Wiederhergestellt werden Scan-Metadaten, Namen, Position, Quaternion-Rotation, Skalierung, statisches/dynamisches Verhalten, Colliderform und -sichtbarkeit, Primitive inklusive Farbe, Reset-Basis, Auswahl, Werkzeug und Kamera.
+- Physikzustände werden nicht eingefroren: Export während eines Tests sichert die bearbeitete Ausgangsszene; Öffnen startet im Editor. Das bisherige Verhalten bleibt: Start eines Physiktests setzt auch die Transform-Reset-Basis auf den bearbeiteten Start.
+- Fehler bleiben im Projektstatus lesbar: ungültiges JSON, unbekannte Version, ungültige Zustandsfelder, unpassender oder defekter Scan und Größenlimits.
+- Keine zusätzlichen Abhängigkeiten, keine Uploads oder absoluten Quelldateipfade im Export.
+
+## Projektformat und Autosave
+
+Version 1: `format: "agc-project"`, `version: 1`, `objects` und `editor`.
+Die vollständige Feldbeschreibung steht in [AGC_PROJECT_FORMAT.md](AGC_PROJECT_FORMAT.md).
+
+Die GLB wird nicht eingebettet: Bei bis zu 250 MiB würde Base64 etwa 333 MiB plus zusätzliche Speicherkopien beanspruchen. `.agc` enthält nur eine Scanreferenz (Basisdateiname, Bytezahl, optionale Prüfsumme). Der Originalscan muss separat aufbewahrt und beim Öffnen erneut gewählt werden. Projekte sind auf 2 MiB Einstellungen, 500 Objekte und einen Scan begrenzt.
+
+Autosave bewusst nicht implementiert: localStorage könnte nur Einstellungen retten; eine robuste IndexedDB-Sicherung großer Scans braucht Quoten-/Fehlerbehandlung und einen Wiederherstellungsablauf. Manueller Export bleibt notwendig, im UI ausdrücklich vermerkt.
+
+## Bestehender MVP
+
+- Three.js-Studioansicht, Orbit-Kamera, Raster, Fokus, lokaler GLB-Import mit Dateiauswahl/Drag-and-drop und Ladefortschritt.
 - Move/Rotate/Scale, numerische Werte, Boden-Ausrichtung und Transform-Reset.
-- Statisch/Physik-Verhalten, separater Cannon-es-Testmodus, Maus greifen/ziehen/fallen lassen, Reset auf die bearbeitete Ausgangsszene.
-- Sichtbarer orientierter Collider folgt Meshposition, Rotation und Skalierung. Schnelle Box oder segmentierte Boxen. Collider sind bewusst grob; kein Rohscan-Durchsuchen und keine Behauptung reparierter Scanlöcher.
-- Neuer GLB-Import ersetzt den zuvor importierten Scan und entsorgt dessen Ressourcen. Dateien werden nur im Browser geparst; keine Upload-Schnittstelle. Originalqualität bleibt unangetastet, keine automatische Reduktion.
-- Scaniverse-GLB lokal ausserhalb des Repos geprüft. SHA-256 stimmt mit dem JARVIS-Original überein: `c9e14c5135b99082f0d92ca0fd7275cd6fb12c6762ea6db649c4263aa17bd6d2`. Kein privates Modell im Git.
+- Cannon-es-Physiktest, Greifen/Ziehen/Fallenlassen, Reset auf bearbeiteten Start.
+- Grobe Box- und segmentierte Collider; Sichtbarkeit folgt Objekttransformationen.
+- Ein neuer Scan ersetzt den vorherigen und entsorgt dessen Ressourcen. Originalqualität wird nicht reduziert.
 
-## Prüfung
+## Prüfungen
 
-- Playwright 3/3 erfolgreich am laufenden Preview: echter GLB-Import und Colliderabgleich nach Drehen/Skalieren; Testbox fällt, lässt sich per Maus greifen und ziehen und Reset stellt den bearbeiteten Start wieder her; wiederholter GLB-Import hält Three.js-Geometrie-/Textur-Ressourcen konstant, ungültige Datei zeigt Fehler und bewahrt die vorherige Szene.
-- Vite Produktionsbuild erfolgreich. Bundle ~714 kB minifiziert / 184 kB gzip; Vite weist auf Chunkgrösse >500 kB hin. `npm audit --audit-level=moderate`: keine Advisories.
-- Chromium ARM64 mit SwiftShader (Software-WebGL); daher keine Aussage zu Hardware-/Mobil-GPU-Performance.
-- Preview: `http://192.168.178.200:4187/agc/`, HTTP 200. Vite-Prozess bleibt als lokale Vorschau aktiv.
-- Screenshots: `artifacts/agc-start.png`, `artifacts/agc-scan-collider.png`, `artifacts/agc-physics.png`, `artifacts/agc-reset.png`.
+Die ursprünglichen drei Playwright-Szenarien verwenden jetzt eine im Test erzeugte, selbständige GLB statt einer privaten Datei außerhalb des Repos. Screenshots landen in ignorierten Testausgaben; die historischen Aufnahmen in `artifacts/` werden nicht überschrieben. Ein eigener Testserver auf Port 4188 verhindert Tests gegen eine veraltete Vorschau auf 4187.
 
-## Grenzen / Fortsetzung
+Abschlussprüfung am 2026-09-28:
 
-Ein Scanobjekt zur Zeit; erneuter GLB-Import ersetzt den vorherigen Scan. Nur GLB. Box-/segmentierte Box-Kollisionen approximieren Form und Topologie; die Palme ist kein begehbarer Untergrundnachweis. Kein Export, Persistenz, Walkable-Surface-Erkennung, mobiles Layout oder echte GPU-/Mobilabnahme. Der Palmen-Prototyp-Branch und Mooslicht wurden nicht verändert. Nächste spätere Entscheidung: ob ein MVP-Export/Projektformat und bessere scanabhängige Colliderpriorität den nächsten sinnvollen Umfang bilden; zuerst diesen Prototyp am Zielgerät begutachten.
+- `npm run build`: erfolgreich; JS ca. 722 kB minifiziert / 187 kB gzip. Bestehende Warnung für Chunkgröße >500 kB.
+- `npm test`: **8/8 erfolgreich** (ca. 1,1 Minuten). Enthalten: bisheriger Import/Transform/Collider-Abgleich, Fallen/Greifen/Reset, wiederholter Import/Ressourcen; zusätzlich Export/Neuladen mit vollständigem Zustandsvergleich, primitive/leere Projekte, Fehler/Versionen, falscher und beschädigter Scan, Abbruch, Web-Crypto-Grenzen und Größen-/Geometrievalidierung.
+- `npm audit --audit-level=moderate`: **0 Schwachstellen**.
+- `git diff --check`: erfolgreich.
+- Desktop-Testaufnahme mit neuen Projektaktionen und Statuszeile visuell geprüft. Kein privater Scan außerhalb des Repos gelesen oder verwendet.
+
+## Bekannte Grenzen / nächste Schritte
+
+- Original-GLB bleibt für Scanprojekte notwendig; kein Autosave, keine Versionsmigration, nur ein Scan gleichzeitig.
+- Ohne Web Crypto ist die Scanreferenz nur durch Dateiname/Größe geprüft. Projekte mit SHA-256 verlangen HTTPS oder localhost; fehlende Prüfmöglichkeit führt zu einem verständlichen Fehler.
+- Nur selbständige GLB-Dateien; externe Textur-/Bufferreferenzen werden abgewiesen.
+- Collider bleiben grobe Approximationen, keine reparierten oder garantiert begehbaren Scanflächen.
+- Browserprüfungen mit Chromium/SwiftShader belegen keine Hardware-/Mobil-GPU-Performance. Große echte Scans wurden in diesem Turn nicht verwendet; keine privaten Assets im Commit.
+- Bestehende Vite-Warnung für einen JS-Chunk über 500 kB bleibt bestehen.
+- Empfohlener nächster Schritt: den Speichern-/Öffnen-Ablauf mit einem repräsentativen großen Scan auf dem Zielgerät prüfen; anschließend scanabhängige Collider und deren Physikqualität verbessern. IndexedDB-Wiederherstellung kann bei bestätigtem Bedarf separat folgen.
