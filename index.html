@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f4f3ef" />
+    <title>AGC — Scan editor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <a class="brand" href="#" aria-label="AGC home"
+          ><span class="brand-mark">A</span><span>AGC</span
+          ><span class="brand-sub">AUTOMATIC GAME CREATOR</span></a
+        >
+        <div class="project-title">
+          <span class="status-dot"></span
+          ><span id="projectName">Untitled scene</span
+          ><span class="saved-pill">LOCAL</span>
+        </div>
+        <div class="top-actions">
+          <button id="helpBtn" class="icon-button" aria-label="Help">?</button
+          ><button
+            id="exportBtn"
+            class="quiet-button"
+            title="Export is not part of this prototype"
+          >
+            Export <span>↗</span></button
+          ><button id="testBtn" class="primary-button">
+            <span class="play-icon">▶</span> Test scene
+          </button>
+        </div>
+      </header>
+      <main class="workspace">
+        <aside class="left-rail">
+          <div class="rail-label">SCENE</div>
+          <button class="rail-tool active" data-tool="select" title="Select">
+            <span>↖</span><small>Select</small>
+          </button>
+          <button class="rail-tool" data-tool="translate" title="Move">
+            <span>✣</span><small>Move</small>
+          </button>
+          <button class="rail-tool" data-tool="rotate" title="Rotate">
+            <span>⟳</span><small>Rotate</small>
+          </button>
+          <button class="rail-tool" data-tool="scale" title="Scale">
+            <span>⤢</span><small>Scale</small>
+          </button>
+          <div class="rail-divider"></div>
+          <button id="addBoxBtn" class="rail-tool" title="Add test box">
+            <span>＋</span><small>Primitive</small>
+          </button>
+          <div class="rail-bottom">
+            <span class="help-orb">i</span><small>LOCAL<br />SESSION</small>
+          </div>
+        </aside>
+
+        <section class="viewport-column">
+          <div class="viewport-toolbar">
+            <div class="crumb">
+              <span>SCENE</span><b>/</b
+              ><strong id="selectionLabel">No object selected</strong>
+            </div>
+            <div class="view-actions">
+              <button id="focusBtn" class="tool-button" disabled>
+                <span>⌖</span> Focus</button
+              ><button id="groundBtn" class="tool-button" disabled>
+                <span>↓</span> Ground</button
+              ><button id="resetTransformBtn" class="tool-button" disabled>
+                <span>↺</span> Reset</button
+              ><i></i
+              ><button id="colliderToggle" class="tool-button toggle">
+                <span class="cube-icon">◇</span> Colliders
+                <b class="toggle-indicator"></b>
+              </button>
+            </div>
+          </div>
+          <div id="viewport" class="viewport" aria-label="3D scene viewport">
+            <canvas id="sceneCanvas"></canvas>
+            <div class="viewport-vignette"></div>
+            <div id="emptyState" class="empty-state">
+              <div class="empty-kicker">
+                <span class="spark">✳</span> YOUR WORKSPACE IS READY
+              </div>
+              <h1>Bring a scan<br />into the world.</h1>
+              <p>
+                Import a GLB to inspect, align and test it in a live 3D scene.
+              </p>
+              <button id="importEmptyBtn" class="import-button">
+                <span>＋</span> Import a GLB
+              </button>
+              <div class="drop-note">
+                or drag a file anywhere into the viewport
+              </div>
+              <div class="supported">
+                <span>GLB</span><span>LOCAL ONLY</span><span>NO UPLOADS</span>
+              </div>
+            </div>
+            <div id="dropOverlay" class="drop-overlay">
+              <span>＋</span><b>Drop GLB to import</b
+              ><small>File stays on this device</small>
+            </div>
+            <div id="loadingOverlay" class="loading-overlay" hidden>
+              <div class="loader-ring"></div>
+              <strong>Reading your model</strong
+              ><span id="loadProgress">Preparing local file…</span>
+              <div class="progress-track"><i id="progressBar"></i></div>
+            </div>
+            <div id="toast" class="toast" role="status"></div>
+            <div class="axis-widget">
+              <span class="axis-y">Y</span><span class="axis-x">X</span
+              ><span class="axis-z">Z</span><i></i>
+            </div>
+            <div class="viewport-bottom">
+              <div class="scene-stats">
+                <span class="live-dot"></span
+                ><span id="sceneStatus">EDITOR MODE</span><b></b
+                ><span id="meshStats">0 meshes</span>
+              </div>
+              <div class="camera-hint">
+                DRAG TO ORBIT <span>·</span> SCROLL TO ZOOM
+              </div>
+            </div>
+            <div id="testBanner" class="test-banner" hidden>
+              <span class="live-dot"></span> PHYSICS TEST
+              <small>Drag an object to grab · release to drop</small
+              ><button id="resetTestBanner">↺ Reset test</button>
+            </div>
+          </div>
+          <div class="timeline">
+            <div class="timeline-label">
+              <span class="timeline-dot"></span> SCENE OBJECTS
+              <b id="objectCount">0</b>
+            </div>
+            <div id="objectList" class="object-list"></div>
+            <button id="addPrimitiveBottom" class="add-object">
+              <span>＋</span> Add primitive
+            </button>
+          </div>
+        </section>
+
+        <aside class="inspector">
+          <div class="inspector-head">
+            <div>
+              <span class="panel-eyebrow">INSPECTOR</span>
+              <h2 id="inspectorTitle">Scene</h2>
+            </div>
+            <button class="more-button" aria-label="More options">···</button>
+          </div>
+          <div class="inspector-scroll">
+            <section class="panel-section">
+              <div class="section-title">
+                OBJECT <span id="objectType" class="type-chip">EMPTY</span>
+              </div>
+              <div id="noSelection" class="no-selection">
+                <div class="selection-glyph">⌖</div>
+                <strong>Select an object</strong
+                ><span
+                  >Choose an object from the scene list or add a primitive to
+                  get started.</span
+                >
+              </div>
+              <div id="objectProperties" hidden>
+                <label class="field-label"
+                  >Name<input id="objectName" type="text" value=""
+                /></label>
+                <div class="field-label">
+                  Behavior
+                  <div class="segmented">
+                    <button data-body="static" class="selected">Static</button
+                    ><button data-body="dynamic">Physics</button>
+                  </div>
+                </div>
+                <div class="field-label">
+                  Collider shape
+                  <div class="select-wrap">
+                    <select id="colliderShape">
+                      <option value="box">Bounding box — fast</option>
+                      <option value="compound">
+                        Segmented boxes — scan
+                      </option></select
+                    ><span>⌄</span>
+                  </div>
+                </div>
+                <div id="colliderNote" class="collider-note">
+                  Fast box approximation. Scan detail is visual only.
+                </div>
+              </div>
+            </section>
+            <section id="transformPanel" class="panel-section" hidden>
+              <div class="section-title">
+                TRANSFORM
+                <button id="transformResetSmall" class="reset-link">
+                  Reset
+                </button>
+              </div>
+              <div class="vector-field">
+                <label>Position</label>
+                <div>
+                  <span>X</span
+                  ><input
+                    data-vector="position"
+                    data-axis="x"
+                    type="number"
+                    step="0.1"
+                  /><span>Y</span
+                  ><input
+                    data-vector="position"
+                    data-axis="y"
+                    type="number"
+                    step="0.1"
+                  /><span>Z</span
+                  ><input
+                    data-vector="position"
+                    data-axis="z"
+                    type="number"
+                    step="0.1"
+                  />
+                </div>
+              </div>
+              <div class="vector-field">
+                <label>Rotation <small>°</small></label>
+                <div>
+                  <span>X</span
+                  ><input
+                    data-vector="rotation"
+                    data-axis="x"
+                    type="number"
+                    step="5"
+                  /><span>Y</span
+                  ><input
+                    data-vector="rotation"
+                    data-axis="y"
+                    type="number"
+                    step="5"
+                  /><span>Z</span
+                  ><input
+                    data-vector="rotation"
+                    data-axis="z"
+                    type="number"
+                    step="5"
+                  />
+                </div>
+              </div>
+              <div class="vector-field">
+                <label>Scale</label>
+                <div>
+                  <span>X</span
+                  ><input
+                    data-vector="scale"
+                    data-axis="x"
+                    type="number"
+                    step="0.1"
+                  /><span>Y</span
+                  ><input
+                    data-vector="scale"
+                    data-axis="y"
+                    type="number"
+                    step="0.1"
+                  /><span>Z</span
+                  ><input
+                    data-vector="scale"
+                    data-axis="z"
+                    type="number"
+                    step="0.1"
+                  />
+                </div>
+                <button
+                  id="uniformScale"
+                  class="uniform-button"
+                  title="Uniform scale"
+                >
+                  ↔
+                </button>
+              </div>
+            </section>
+            <section class="panel-section">
+              <div class="section-title">
+                COLLISION <span class="section-state"><i></i> APPROXIMATE</span>
+              </div>
+              <div class="collision-card">
+                <div class="collision-icon">◇</div>
+                <div>
+                  <strong>Simple collider</strong
+                  ><span id="collisionDimensions">No collider yet</span>
+                </div>
+                <button
+                  id="showColliderBtn"
+                  class="eye-button"
+                  title="Toggle collider overlay"
+                >
+                  ◉
+                </button>
+              </div>
+              <p class="fine-print">
+                Collider bounds are simplified. Scan holes and surface detail
+                are not represented.
+              </p>
+            </section>
+            <section class="panel-section lighting-section">
+              <div class="section-title">VIEWPORT</div>
+              <div class="setting-row">
+                <div>
+                  <strong>Studio lighting</strong
+                  ><span>Neutral studio tone</span>
+                </div>
+                <span class="check-mark">✓</span>
+              </div>
+              <div class="setting-row">
+                <div>
+                  <strong>Ground grid</strong><span>World-space reference</span>
+                </div>
+                <span class="check-mark">✓</span>
+              </div>
+            </section>
+          </div>
+          <div class="inspector-footer">
+            <div class="local-lock">
+              ▣ <span>All files stay in this browser session.</span>
+            </div>
+            <button id="fileButton" class="file-button">＋ Import GLB</button
+            ><input
+              id="fileInput"
+              type="file"
+              accept=".glb,model/gltf-binary"
+              hidden
+            />
+          </div>
+        </aside>
+      </main>
+      <div id="helpDialog" class="dialog-backdrop" hidden>
+        <div class="dialog">
+          <button id="closeHelp" class="dialog-close">×</button
+          ><span class="panel-eyebrow">QUICK GUIDE</span>
+          <h2>From scan to test.</h2>
+          <ol>
+            <li>
+              <b>Import</b> a local GLB. It is parsed in your browser and never
+              uploaded.
+            </li>
+            <li>
+              <b>Align</b> it with Move, Rotate, Scale, Ground and the numeric
+              inspector.
+            </li>
+            <li>
+              <b>Inspect</b> its simplified collider overlay. Use a box for a
+              quick test.
+            </li>
+            <li>
+              <b>Test</b> physics, grab an object, release it, and reset to your
+              edited scene.
+            </li>
+          </ol>
+          <p>
+            Scan colliders are approximations. This prototype does not infer
+            walkable surfaces.
+          </p>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

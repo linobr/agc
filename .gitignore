@@ -141,3 +141,13 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Local scans, generated build output, and browser test traces
+uploads/
+*.glb
+test-results/
+playwright-report/
+blob-report/
+*.log
+*.db
+.env
