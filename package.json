@@ -19,7 +19,7 @@
   "bugs": {
     "url": "https://github.com/linobr/agc/issues"
   },
-  "homepage": "https://github.com/linobr/agc#readme",
+  "homepage": "https://linobr.github.io/agc/",
   "dependencies": {
     "cannon-es": "0.20.0",
     "three": "0.180.0"

@@ -2,11 +2,11 @@
 
 Stand: 2026-09-28. Repo `linobr/agc`.
 
-- Gesicherter MVP: `jarvis/agc-mvp-20260928`, Commit `0c80cba6a50fec2544b68d7fe4b222dc0f1fbd0c`.
-- Weiterentwicklung: `jarvis/agc-project-save-load-20260928`, direkt auf diesem MVP aufgebaut.
-- `main` bleibt bei `dca95ac87dd7ec20547ca4344fc62ef8ce37a657`. Kein Merge, Force-Push oder Deployment.
+- `main` enthält den geprüften MVP (`0c80cba`), Save/Open Project (`6b145dd`) und GitHub Pages (`67e84f6`). Lokaler und Remote-Stand vor diesem Dokumentations-Cleanup: `67e84f660be26707c50d1703365cac13e36d9969`.
+- Öffentliche App: **https://linobr.github.io/agc/**. Das Pages-Deployment mit `67e84f6` wurde erfolgreich getestet.
+- Git-Strategie: `main` ist der aktuelle funktionierende und geprüfte Source-Stand. Featurebranches nur temporär für konkrete Arbeiten; wichtige stabile Wiederherstellungspunkte zusätzlich mit Tags / GitHub Releases markieren. Secrets, Runtime- und private Nutzerdaten bleiben außerhalb von Git und Releases.
 
-## Neu: Projekte speichern und wieder öffnen
+## Projekte speichern und wieder öffnen
 
 - **Save Project** lädt `scene.agc` als lokale JSON-Datei herunter.
 - **Open Project** validiert die Einstellungen und fordert bei Scanprojekten ausdrücklich die ursprüngliche GLB an. Dateiname und Bytezahl werden geprüft, auf HTTPS/localhost zusätzlich SHA-256. Abbrechen und fehlerhafte Dateien erhalten die bestehende Szene.
@@ -36,13 +36,17 @@ Autosave bewusst nicht implementiert: localStorage könnte nur Einstellungen ret
 
 Die ursprünglichen drei Playwright-Szenarien verwenden jetzt eine im Test erzeugte, selbständige GLB statt einer privaten Datei außerhalb des Repos. Screenshots landen in ignorierten Testausgaben; die historischen Aufnahmen in `artifacts/` werden nicht überschrieben. Ein eigener Testserver auf Port 4188 verhindert Tests gegen eine veraltete Vorschau auf 4187.
 
-Abschlussprüfung am 2026-09-28:
+Bisherige Funktionsabnahme am 2026-09-28 (vor diesem Dokumentations-Cleanup):
 
 - `npm run build`: erfolgreich; JS ca. 722 kB minifiziert / 187 kB gzip. Bestehende Warnung für Chunkgröße >500 kB.
 - `npm test`: **8/8 erfolgreich** (ca. 1,1 Minuten). Enthalten: bisheriger Import/Transform/Collider-Abgleich, Fallen/Greifen/Reset, wiederholter Import/Ressourcen; zusätzlich Export/Neuladen mit vollständigem Zustandsvergleich, primitive/leere Projekte, Fehler/Versionen, falscher und beschädigter Scan, Abbruch, Web-Crypto-Grenzen und Größen-/Geometrievalidierung.
 - `npm audit --audit-level=moderate`: **0 Schwachstellen**.
 - `git diff --check`: erfolgreich.
 - Desktop-Testaufnahme mit neuen Projektaktionen und Statuszeile visuell geprüft. Kein privater Scan außerhalb des Repos gelesen oder verwendet.
+
+## Dokumentations-Cleanup — 28.09.2026
+
+Nur Dokumentation und `package.json`-Homepage aktualisiert; keine Funktions- oder Workflowänderungen. Erneut geprüft: `npm run build` erfolgreich (bekannte Chunkgrößenwarnung), `npm test` **8/8 bestanden**, `npm audit --audit-level=moderate` **0 Schwachstellen**, `git diff --check` erfolgreich. Der Dokumentationscommit verwendet `[skip ci]`, damit sein Push keinen neuen Pages-Deploy auslöst.
 
 ## Bekannte Grenzen / nächste Schritte
 
@@ -52,4 +56,4 @@ Abschlussprüfung am 2026-09-28:
 - Collider bleiben grobe Approximationen, keine reparierten oder garantiert begehbaren Scanflächen.
 - Browserprüfungen mit Chromium/SwiftShader belegen keine Hardware-/Mobil-GPU-Performance. Große echte Scans wurden in diesem Turn nicht verwendet; keine privaten Assets im Commit.
 - Bestehende Vite-Warnung für einen JS-Chunk über 500 kB bleibt bestehen.
-- Empfohlener nächster Schritt: den Speichern-/Öffnen-Ablauf mit einem repräsentativen großen Scan auf dem Zielgerät prüfen; anschließend scanabhängige Collider und deren Physikqualität verbessern. IndexedDB-Wiederherstellung kann bei bestätigtem Bedarf separat folgen.
+- Empfohlener nächster Entwicklungsschritt: begehbare Scanflächen / bessere scanabhängige Collider. Die Physikqualität gezielt mit repräsentativen Scans auf dem Zielgerät prüfen.

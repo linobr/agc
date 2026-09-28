@@ -2,6 +2,10 @@
 
 AGC is a local-first browser editor for turning a 3D scan into an object you can inspect, position and try in a small physics scene. The first prototype focuses on a single reliable loop: import a GLB, align it, inspect a simple collider, start a physics test, grab and drop objects, then restore the edited starting scene.
 
+Public app: **https://linobr.github.io/agc/**. `main` contains the tested MVP, Save/Open Project (`6b145dd`) and GitHub Pages setup (`67e84f6`). Pages deployment was successfully tested.
+
+`main` is the current working, checked source. Use temporary feature branches for concrete work; mark important stable recovery points with Git tags / GitHub Releases. Never include secrets, runtime data or private user assets in Git or releases.
+
 ## Run locally
 
 ```sh
@@ -9,7 +13,7 @@ npm ci
 npm run dev -- --host 0.0.0.0
 ```
 
-Open `/agc/` on the dev server. The Vite build uses `/agc/` as its base path for a future GitHub Pages deployment. `npm run build` verifies the static output; no upload endpoint or AI service is used. Imported files remain in the browser tab and are never sent to a server.
+Open `/agc/` on the dev server. The Vite build uses `/agc/` as its base path for the existing GitHub Pages deployment. `npm run build` verifies the static output; no upload endpoint or AI service is used. Imported files remain in the browser tab and are never sent to a server.
 
 ## Controls
 
@@ -44,11 +48,14 @@ This is an editor MVP, not a game engine. It handles one GLB at a time and uses 
 
 The user's Scaniverse palm is a local-only test file and is not included in this repository. Do not commit private uploads, derived assets, credentials, browser recordings or runtime data.
 
+Next recommended development step: walkable scan surfaces and better scan-dependent colliders.
+
 ## Checks
 
 ```sh
 npm test
 npm run build
+npm audit --audit-level=moderate
 ```
 
 Playwright tests cover the local editor flow with generated GLBs and primitives. They do not imply mobile-GPU performance or support for every malformed GLB.
@@ -61,4 +68,4 @@ The checked-in captures show the local-only start screen, the palm scan with its
 | ------------------------------------- | ------------------------------------------------------------ | ------------------------------------------ |
 | ![AGC start](artifacts/agc-start.png) | ![Imported scan and bounds](artifacts/agc-scan-collider.png) | ![Physics test](artifacts/agc-physics.png) |
 
-The private source GLB is intentionally absent. See [AGC_PROGRESS.md](AGC_PROGRESS.md) for the branch base, test evidence and current limits.
+The private source GLB is intentionally absent. See [AGC_PROGRESS.md](AGC_PROGRESS.md) for the current main baseline, test evidence and limits.
