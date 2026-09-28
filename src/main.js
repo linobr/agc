@@ -1,3 +1,4 @@
+import { FrameMeter } from './scan-intelligence.js';
 import { proxyForEntry } from './scan-optimize.js';
 import { ScanEditor, prepareScan, disposeScan } from './scan-editor.js';
 import { DEFAULT_PRESENTATION, validatePresentation } from './scan-cleanup.js';
@@ -116,7 +117,10 @@ const gameplayEditor = new GameplayEditor(scene, {
 });
 const scanEditor = new ScanEditor(scene, {
   entry: () => objects.find(e=>e.kind==='model'),
-  walkState: () => ({ready:!!walkData, reason:$('walkStatus').textContent}),
+  walkState: () => ({ready:!!walkData, spawn:!!walkData?.spawn, reason:$('walkStatus').textContent}),
+  entries: () => objects,
+  walkSettings: () => ({...walkSettings,slope:Number($('walkSlope').value),minArea:Number($('walkArea').value),stepHeight:Number($('walkStep').value)}),
+  setWalkSettings: values => {Object.assign(walkSettings,values);$('walkSlope').value=values.slope;$('walkArea').value=values.minArea;$('walkStep').value=values.stepHeight;},
   busy: () => testMode || !!walkPlayer || !$("loadingOverlay").hidden || !!pendingProject,
   loading: showLoading,
   progress: message => { $("loadProgress").textContent=message; },
@@ -378,6 +382,7 @@ async function importFile(file) {
     scanEditor.update();
     walkSettings.spawnMode = "auto"; walkSettings.spawn = null;
     rebuildWalk();
+    if(scan.cleanup.autoTune && scan.analysis.triangles>scan.cleanup.proxy.target) await scanEditor.autoTune(true);
     projectMessage("Scan imported. Save Project downloads settings; keep the original GLB. No autosave.");
     notify(`Imported ${source.fileName} · ${entry.meshes} meshes`);
   } catch (error) {
@@ -1014,6 +1019,7 @@ function updateSpawn() {
   $('walkRegions').textContent = `Regions: ${walkData.regions.length} · Active: ${region ? region.id : 'none'} · ${region ? region.area.toFixed(2) : '0'} m²${region ? ` · ${region.triangleCount} triangles · height ${region.minHeight.toFixed(2)}–${region.maxHeight.toFixed(2)} m` : ''}`;
   $('spawnStatus').textContent = `${walkSettings.spawnMode === 'manual' ? 'Manual' : 'Auto'}: ${result.reason}${result.valid ? '' : ' Walk Test cannot start.'}`;
   showWalkHelpers();
+  scanEditor.updateProxyStatus();
   return result.valid;
 }
 $('spawnPlace').onclick = () => { if (!walkPlayer && !testMode) setSpawnMode(!spawnMode); };
@@ -1127,9 +1133,21 @@ window.addEventListener('keyup', e => walkKeys.delete(e.key.toLowerCase()));
 window.addEventListener('blur', () => walkKeys.clear());
 document.addEventListener('visibilitychange', () => walkKeys.clear());
 
+const frameMeter=new FrameMeter();let hudUpdate=0;
+$('performanceToggle').onchange=()=>{frameMeter.reset();$('performanceHud').hidden=!$('performanceToggle').checked || !walkPlayer;};
+document.addEventListener('visibilitychange',()=>frameMeter.reset());
 let frameDelta = 0;
 function loop() {
   requestAnimationFrame(loop);
+  const hudActive=$('performanceToggle').checked && !!walkPlayer && !document.hidden;
+  $('performanceHud').hidden=!hudActive;
+  if(hudActive) {
+    const now=performance.now(),sample=frameMeter.sample(now);
+    if(now-hudUpdate>500) {
+      hudUpdate=now;
+      $('performanceHud').textContent=`${sample.fps.toFixed(1)} FPS · ${sample.ms.toFixed(1)} ms frame (smoothed)\nRender Triangles: ${renderer.info.render.triangles.toLocaleString()} · Proxy Triangles: ${objects.reduce((n,e)=>n+(proxyForEntry(e)?.triangles || 0),0).toLocaleString()}`;
+    }
+  } else frameMeter.reset();
   if (!walkPlayer) orbit.update();
   frameDelta = Math.min(clock.getDelta(), 0.05);
   updateWalk(frameDelta);

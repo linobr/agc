@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 // Algorithm version is part of the project format: never silently change saved recipes.
-export const DEFAULT_CLEANUP = { algorithm: 1, mode: 'original', auto: false, crop: null, crops: [], offset: [0,0,0], optimization: { target:200000, error:0.001 }, proxy: { enabled:true, target:20000, error:0.01 } };
+export const DEFAULT_CLEANUP = { algorithm: 1, preset: null, autoTune: true, mode: 'original', auto: false, crop: null, crops: [], offset: [0,0,0], optimization: { target:200000, error:0.001 }, proxy: { enabled:true, target:20000, error:0.01 } };
 export const DEFAULT_PRESENTATION = { lighting: 'studio', exposure: 1.05, background: 'light' };
 export const SCAN_LIMIT = 600000;
 const pause = () => new Promise(resolve => setTimeout(resolve, 0));
@@ -14,8 +14,9 @@ export function validateCleanup(c) {
       !c.optimization || !Number.isInteger(c.optimization.target) || c.optimization.target<100 || c.optimization.target>600000 || !Number.isFinite(c.optimization.error) || c.optimization.error<0.0001 || c.optimization.error>0.005 ||
       !c.proxy || typeof c.proxy.enabled!=='boolean' || !Number.isInteger(c.proxy.target) || c.proxy.target<100 || c.proxy.target>50000 || !Number.isFinite(c.proxy.error) || c.proxy.error<0.001 || c.proxy.error>0.02)
     throw new Error('Invalid AGC project: optimization, proxy or crop history settings.');
+  if ((c.preset !== undefined && c.preset !== null && !['Object','Room','Outdoor','Vegetation'].includes(c.preset)) || (c.autoTune !== undefined && typeof c.autoTune !== 'boolean')) throw new Error('Invalid scan preset or auto-tune setting.');
   const box=b=>({operation:b.operation,min:[...b.min],max:[...b.max]});
-  return { algorithm:c.algorithm, mode:c.mode, auto:c.auto, offset:[...c.offset], crop:c.crop && box(c.crop), crops:c.crops.map(box),
+  return { algorithm:c.algorithm, preset:c.preset ?? null, autoTune:c.autoTune ?? false, mode:c.mode, auto:c.auto, offset:[...c.offset], crop:c.crop && box(c.crop), crops:c.crops.map(box),
     optimization:{target:c.optimization.target,error:c.optimization.error}, proxy:{enabled:c.proxy.enabled,target:c.proxy.target,error:c.proxy.error} };
 }
 export function validatePresentation(p) {

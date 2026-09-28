@@ -1158,3 +1158,6 @@ button {
 #scanPanel details { margin: 12px 0; }
 #scanPanel details label { display: block; margin: 8px 0; font-size: 11px; }
 #scanPanel details input[type=number] { width: 96px; }
+
+#performanceHud { position:absolute; right:16px; top:56px; z-index:12; white-space:pre-line; padding:8px 12px; border-radius:6px; background:#16232de6; color:#fff; font:12px/1.6 monospace; pointer-events:none; }
+#performanceHud[hidden] { display:none; }

@@ -135,6 +135,7 @@
                 DRAG TO ORBIT <span>·</span> SCROLL TO ZOOM
               </div>
             </div>
+            <output id="performanceHud" hidden aria-label="Performance HUD"></output>
             <div id="gameHud" class="game-hud" hidden>
               <strong>GAME TEST</strong><span id="gameHudCount"></span><span id="gameHudTime"></span>
               <span id="gameHudObjectives"></span><p id="gameMessage" role="status"></p>
@@ -212,6 +213,10 @@
               </div>
             </section>
             <section id="scanPanel" class="panel-section" hidden>
+              <p id="scanHealth" style="white-space:pre-line" aria-live="polite"></p>
+              <label>Scan preset <select id="scanPreset"><option>Object</option><option>Room</option><option>Outdoor</option><option>Vegetation</option></select></label>
+              <button id="presetApply">Apply Preset Defaults</button>
+              <p class="fine-print">Editable defaults only. No automatic crop or semantic repair.</p>
               <div class="section-title">SCAN QUALITY</div>
               <strong id="scanQuality"></strong>
               <p id="scanAnalysis" class="scan-readout"></p>
@@ -228,6 +233,8 @@
                 <label>Proxy target <input id="proxyTarget" type="number" min="100" max="50000" step="100" value="20000"></label>
                 <label>Proxy error (scan units) <input id="proxyError" type="number" min="0.001" max="0.02" step="0.001" value="0.01"></label>
                 <button id="proxyApply">Rebuild Proxy</button>
+                <label><input id="proxyAutoTune" type="checkbox" checked> Auto-tune after import / optimization / crop</label>
+                <button id="proxyTune">Auto Tune Proxy</button><p id="tuneStatus" aria-live="polite"></p>
                 <label><input id="showProxy" type="checkbox"> Show Collision Proxy</label><p id="proxyStatus"></p>
               </details>
               <button id="cropStart">Crop Scan</button>
@@ -400,6 +407,7 @@
               <label class="walk-toggle"><input id="walkColliders" type="checkbox" /> Show Collision</label>
               <label class="walk-toggle"><input id="walkMarkers" type="checkbox" checked /> Show Spawn / Player</label>
               <p class="fine-print">WASD / arrows: move · R: respawn · Esc: editor. World axes: W = −Z, D = +X. Units assumed metres. Small steps use the configured height. No jump. Spawn and walk settings are saved in the project.</p>
+              <label><input id="performanceToggle" type="checkbox"> Performance HUD</label>
               <output id="walkTelemetry" class="fine-print"></output>
             </section>
             <section class="panel-section lighting-section">

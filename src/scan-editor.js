@@ -1,3 +1,4 @@
+import { presetSettings, recommendPreset, scanHealth, tuneProxy } from './scan-intelligence.js';
 import * as THREE from 'three';
 import { DEFAULT_CLEANUP, validateCleanup, analyzeScan, deriveScan, activateScan, groundOffset } from './scan-cleanup.js';
 import { optimizeVisual, buildCollisionProxy, disposeProxy, proxyForEntry } from './scan-optimize.js';
@@ -56,6 +57,9 @@ export class ScanEditor {
     for(const button of document.querySelectorAll('[data-scan-mode]')) button.onclick=()=>{$('scanMode').value=button.dataset.scanMode;this.apply('mode');};
     $('optimizeApply').onclick=()=>this.apply('optimize');
     $('proxyApply').onclick=()=>this.apply('proxy');
+    $('presetApply').onclick=()=>this.apply('preset');
+    $('proxyTune').onclick=()=>this.autoTune();
+    $('proxyAutoTune').onchange=()=>{if(!this.hooks.busy() && this.entry()?.scan) this.entry().scan.cleanup.autoTune=$('proxyAutoTune').checked;else this.update();};
     $('showProxy').onchange=()=>this.update();
     $('cropStart').onclick=()=>this.startCrop();
     $('cropKeep').onclick=()=>this.apply('keep');
@@ -73,6 +77,9 @@ export class ScanEditor {
     if(!scan) {this.helper.visible=false;this.proxyView.visible=false;return;}
     const a=scan.analysis,d=scan.derived,o=scan.optimized,proxy=scan.proxies[scan.cleanup.mode==='original' ? 'original' : 'cleaned'];
     $('scanMode').value=scan.cleanup.mode;
+    $('scanPreset').value=scan.cleanup.preset || recommendPreset(a);
+    $('proxyAutoTune').checked=scan.cleanup.autoTune;
+    $('tuneStatus').textContent=scan.tuning ? `Last tune: ${scan.tuning.status} · ${scan.tuning.attempts.length} attempts · ${scan.tuning.reason}` : 'Auto-tune not run. At most 6 candidates; current walk and spawn settings are validated.';
     for(const b of document.querySelectorAll('[data-scan-mode]')) b.setAttribute('aria-pressed',String(b.dataset.scanMode===scan.cleanup.mode));
     $('optimizationTarget').value=scan.cleanup.optimization.target;
     $('optimizationError').value=scan.cleanup.optimization.error;
@@ -94,10 +101,30 @@ export class ScanEditor {
     let status='Auto proxy above the target. Small or irreducible scans use visual geometry.';
     if(proxy) {
       const state=this.hooks.walkState?.();
-      const use=proxyForEntry(entry) ? (state?.ready ? 'Walk uses this proxy.' : `Proxy selected; Walk unavailable or not yet calculated. ${state?.reason || ''}`) : 'Outside Walk budget/error guard; visual fallback.';
+      const use=proxyForEntry(entry) ? (state?.ready && state?.spawn ? 'Walk uses this proxy.' : `Proxy selected; Walk unavailable or not yet calculated. ${state?.reason || ''}`) : 'Outside Walk budget/error guard; visual fallback.';
       status=`${proxy.triangles.toLocaleString()} triangles · estimated error ${proxy.error.toFixed(5)} scan units · build ${proxy.ms.toFixed(0)} ms. ${use}`;
     }
-    $('proxyStatus').textContent=scan.proxyWarning || status;
+    const health=scanHealth(entry,this.hooks.walkState?.());
+    $('scanHealth').textContent=health.text;
+    $('proxyStatus').textContent=`${health.status} · ${scan.proxyWarning || status}`;
+  }
+  async autoTune(internal=false) {
+    const entry=this.entry();if(!entry?.scan || (!internal && this.hooks.busy())) return;
+    this.cancelPreview();this.hooks.loading('Auto-tuning collision proxy…');
+    const scan=entry.scan;
+    try {
+      const result=await tuneProxy(entry,this.hooks.entries(),this.hooks.walkSettings(),this.hooks.progress);
+      scan.tuning={status:result.status,attempts:result.attempts,reason:result.reason,ms:result.ms};
+      if(result.proxy) {
+        const source=scan.cleanup.mode==='original' ? 'original' : 'cleaned';
+        if(!internal) scan.history=[...scan.history,structuredClone(scan.cleanup)].slice(-20);
+        Object.values(scan.proxies).forEach(disposeProxy);
+        scan.proxies={[source]:result.proxy};scan.cleanup.proxy=result.settings;scan.proxyWarning=null;
+      }
+      this.hooks.changed(entry);
+      if(result.status==='blocked' && this.hooks.walkState()?.spawn) scan.tuning.status='fallback';
+    } catch(error) {scan.tuning={status:'blocked',attempts:[],reason:error.message};}
+    finally {if(!internal) this.hooks.loaded();this.update();}
   }
   startCrop() {
     if(this.hooks.busy()) return;
@@ -170,7 +197,8 @@ export class ScanEditor {
         if(action==='keep' || action==='remove') this.appendCrop(config,action);
         if(action==='cropReset') {config.mode='cleaned';config.crop=null;config.crops=[];}
         if(action==='optimize') {config.mode='optimized';config.optimization={target:Number($('optimizationTarget').value),error:Number($('optimizationError').value)};}
-        if(action==='proxy') config.proxy={enabled:$('proxyEnabled').checked,target:Number($('proxyTarget').value),error:Number($('proxyError').value)};
+        if(action==='preset') config=presetSettings(config,$('scanPreset').value).config;
+        if(action==='proxy') {config.autoTune=false;config.proxy={enabled:$('proxyEnabled').checked,target:Number($('proxyTarget').value),error:Number($('proxyError').value)};}
       }
       validateCleanup(config);
       if(action==='mode') {next={...scan,cleanup:config,proxies:{...scan.proxies}};await ensureVariants(next,this.hooks.progress);}
@@ -179,7 +207,9 @@ export class ScanEditor {
       activateScan(next.analysis,next.derived,next.cleanup.mode,next.optimized);entry.scan=next;
       if(action!=='mode') disposeVariants(scan);
       if(action==='reset') {this.cropping=false;$('cropControls').hidden=true;}
-      const status=this.hooks.changed(entry);
+      if(action==='preset') this.hooks.setWalkSettings(presetSettings(config,config.preset).walk);
+      let status=this.hooks.changed(entry);
+      if(config.autoTune && ['optimize','auto','keep','remove','cropReset'].includes(action)) {await this.autoTune(true);status=this.hooks.walkState()?.spawn ? 'Collision proxy and walkability validated; spawn valid.' : `Walk unavailable: ${this.hooks.walkState()?.reason || 'inspect spawn'}`;}
       $('cleanupStatus').textContent=action==='reset' ? `Original restored. Cleanup recipe cleared. ${status}` : `Applied. ${status}`;
     } catch(error) {$('cleanupStatus').textContent=error.message;}
     finally {this.hooks.loaded();this.update();this.updateBox();}

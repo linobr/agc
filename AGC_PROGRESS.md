@@ -248,3 +248,50 @@ und Ableitungen bleiben auf unterstützte statische Scans bis 600k Dreiecke begr
 - Abschließende lokale Production-Smokes: Optimized/Proxy-Walk, Crop-Preview/Undo und v5
   Save/Open sowie bisheriger Walk-/Stufentest und kompletter Gameplay-Flow erfolgreich,
   ohne JS-/Assetfehler. Veröffentlichte App wird nach dem Push mit generierten Scans geprüft.
+
+## Scan Auto-Tuning, Presets und Performance-HUD (v5-Erweiterung)
+
+- Begrenztes Proxy-Tuning mit höchstens sechs Ziel-/Fehlerpaaren; nach 30 Sekunden
+  beginnt kein weiterer Kandidat. Kleinste tatsächlich erzeugte Variante mit gültiger
+  Walkability und Spawn gewinnt. Bestehende Weltfehler-, Dichte-, Regions- und
+  Kollisionslimits bleiben aktiv; alle Szenenobjekte und manuelle Spawns werden geprüft.
+- Automatisch bei größeren neuen Imports sowie aktivierter Option nach Optimierung/Crop/
+  Cleanup. Expliziter Button jederzeit im Editor. Manuelles Rebuild deaktiviert automatische
+  Abstimmung; erfolglose Versuche behalten bisherige Kollisionsdaten. Keine GLB-Änderungen.
+- Object/Room/Outdoor/Vegetation setzen editierbare Zielzahlen, Proxy-Fehler, Slope,
+  Step Height und minimale Regionsfläche. Keine automatische Geometrieentfernung.
+- Scan Health zeigt Render-/Collision-Komplexität, Walkability/Spawn, heuristische
+  Preset-Empfehlung und nächste Aktion. Die Empfehlung verändert keine Werte.
+- Optionaler Walk-/Game-HUD mit geglätteter FPS/Framezeit und tatsächlichen Render-/Proxy-
+  Dreiecken; kein Profiler, keine Analyse pro Frame. HUD-Sichtbarkeit bleibt session-only.
+- v5 bleibt bestehen: optionale validierte `cleanup.preset`/`autoTune`, gespeicherte
+  konkrete Proxy-Parameter; alte v5-Dateien bleiben ohne automatische Neuabstimmung.
+  Auch v1–v4 laden weiter. README und Formatdokumentation beschreiben Grenzen und Defaults.
+
+Realer lokaler Production-Test (keine privaten Uploads):
+
+- Original 448.567 Dreiecke; Empfehlung **Vegetation** über Größen-/Dichteheuristik.
+- Automatischer Import: sechs Versuche, gültiger Proxy **7.195 Dreiecke**.
+- Kontrollvergleich: manuelle 20k/0,01 ergeben **19.939**, wegen lokaler Dichte blocked;
+  Auto Tune wählt **5k/0,02 → 7.195** (geschätzter Fehler 0,01983), valid.
+- Optimized ohne vorheriges Auto Clean: **199.996** Renderdreiecke. Erneute automatische
+  Abstimmung nach Optimierung erfolgreich. Walk verwendet nach Duplikatfilter **7.101**
+  Dreiecke, 531 begehbare Kandidaten / 7,9 m², gültigen Auto-Spawn; tatsächlicher Walk
+  geerdet. Gemessene Walk-Teilphasen: 96,8 + 46,0 + 10,6 ≈ **153 ms**.
+- HUD-Stichproben: **1,5–1,9 FPS / 515–676 ms**, 200.164 tatsächlich gerenderte Dreiecke
+  einschließlich Hilfsgeometrie, Proxy 7.195. Chromium/SwiftShader (Software-GPU), keine
+  künstliche RAF-Drosselung in diesem Prüflauf. Kein Hardwarebenchmark/FPS-Versprechen.
+- Lokale Screenshots `real-intelligence-health.png` / `real-intelligence-walk.png` und
+  JSON-Messwerte im ignorierten `artifacts/scan-verification` visuell geprüft. Keine
+  zusätzlichen sichtbaren Reparaturen: vorhandene Scanlöcher und Texturfehler bleiben.
+
+Grenzen: begrenzte Kandidatensuche, kein globales Optimum oder vollständiger Navigationstest;
+Fehlerschranken bleiben Näherungen. Dichte kompakte Objekte können als Vegetation empfohlen
+werden; Maße setzen Meter voraus. Einzelne synchrone Geometrie-/Walk-Phasen können trotz
+Fortschrittsanzeige blockieren. Desktop-Hardware separat messen, bevor FPS-Ziele zugesagt werden.
+
+Validierung: finale vollständige Suite **52/52** erfolgreich (alle bisherigen 46 plus sechs
+neue Tests). Ein vorheriger Projekt-Testlauf wurde durch Vite-Neuladen während einer letzten
+Quelltextänderung unterbrochen; der unveränderte finale Stand besteht vollständig. Build
+und lokale Production-Smokes für Auto-Tuning/HUD, Walk/Spawn/Stufen/Save/Open und Gameplay
+sind erfolgreich, ohne JavaScript-/Assetfehler. Audit: keine Schwachstellen; Diff-Check sauber.

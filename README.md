@@ -256,10 +256,61 @@ Representative local scan check (448,567 triangles): default Optimized produced 
 triangles without a pronounced degradation in the inspected overview/detail screenshots.
 The default proxy produced 19,939 triangles but hit the existing per-cell Walk density guard.
 For this scan, proxy target 5,000 with error 0.02 produced 7,195 triangles (7,101 after Walk's
-duplicate filtering), with valid spawn and grounded Walk Test. This is an explicit coarser
-collision setting, not the default. Its estimated error was 0.01983 scan units; the target
+duplicate filtering), with valid spawn and grounded Walk Test. The base proxy defaults remain 20k/0.01; automatic tuning can now select this coarser
+collision setting when it validates successfully. Its estimated error was 0.01983 scan units; the target
 was intentionally not forced. Neither variant repairs the scan's holes, frayed leaves or
 baked texture defects. Local screenshots/metrics stay in the ignored verification folder.
 
 Visual and collision targets are independent. For unusually low visual targets, lower the
 proxy target too if needed; a strict collision error budget may still retain more triangles.
+
+### Automatic proxy tuning, presets and health
+
+New imports enable **Auto Tune Proxy** above the current proxy target. Optimization, applied
+cleanup and crop changes also tune when the checkbox is enabled. At most six target/error
+pairs are tried: 1k/0.005, 3k/0.01, 5k/0.02, 10k/0.01, 20k/0.005 and current manual values
+(duplicates skipped). No new attempt starts after 30 seconds; a running geometry pass can
+finish later. Each trial observes the 600k source budget, 100k collision budget, world-error,
+spatial-density and region guards. All scene collision objects participate. Current slope,
+step height and region area apply, and a manual spawn must remain valid. Among successful
+trials the smallest **actual** triangle count wins; equal counts favor lower estimated error.
+This is a bounded search, not proof of a global optimum or complete gameplay traversal.
+Trials do not change the visual scan or gameplay objects. If none passes, previous collision
+data stays active and status explains the block or usable fallback. Use crop/alignment/scale
+or manual collision authoring when appropriate. Manual **Rebuild Proxy** disables automatic
+tuning; re-enable the checkbox explicitly. Explicit tuning remains available. Opening a
+project rebuilds saved parameters without retuning, preserving the chosen result.
+
+Presets apply only on **Apply Preset Defaults**, never merely on recommendation:
+
+| Preset | Visual target | Proxy target / error (scan units) | Slope | Step (m) | Min region (m²) |
+| --- | ---: | --- | ---: | ---: | ---: |
+| Object | 100k | 5k / 0.005 | 35° | 0.15 | 0.05 |
+| Room | 200k | 20k / 0.01 | 40° | 0.20 | 0.20 |
+| Outdoor | 200k | 20k / 0.02 | 45° | 0.30 | 0.50 |
+| Vegetation | 200k | 5k / 0.02 | 40° | 0.20 | 0.10 |
+
+Presets never crop, remove islands or move geometry; every value remains editable. Existing
+cleanup recipes remain intact. Recommendation uses maximum original scan dimension (>30:
+Outdoor, >6: Room), then density (>100k triangles: Vegetation, otherwise Object). It assumes
+scan units are metres and is **not semantic recognition**; a dense object can be misclassified.
+The health summary reports active render complexity (low ≤50k, medium ≤200k, high >200k),
+actual selected collision geometry, walk/spawn state and a next action. `valid` means a proxy
+with validated spawn, `fallback` means validated visual/previous collision data, and `blocked`
+means walking is unvalidated or unavailable. Changing spawn/transform can invalidate it.
+
+**Performance HUD** is optional in Walk/Game Test and session-only. It shows measured frame
+interval/FPS using a 0.1-weight exponential moving average, refreshed twice per second;
+measurement resets outside test mode, when toggled or on visibility changes. Frame time is
+wall-clock interval, not isolated CPU/GPU work. Render triangles are the renderer's actual
+previous-frame triangle count, including visible helpers/gameplay; proxy triangles count
+selected proxy buffers before Walk duplicate filtering. These are different measurements.
+Software GPU/headless measurements are not a hardware performance guarantee. No profiling,
+analysis or proxy generation runs per frame.
+
+Production verification (private path accepted only with localhost URL):
+
+```sh
+node scripts/verify-intelligence.js http://127.0.0.1:4189/agc/ /absolute/path/to/scan.glb
+node scripts/verify-intelligence.js https://linobr.github.io/agc/
+```

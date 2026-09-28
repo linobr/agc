@@ -261,3 +261,16 @@ No optimized buffers or proxy triangles are serialized. Reopening uses the pinne
 and original GLB to rebuild them; Original remains byte-for-byte separate on disk. Source
 metadata/checksum requirements are unchanged. Preview, proxy debug visibility and the bounded
 20-step undo stack are session-only; all applied crop operations are persisted.
+
+### Optional v5 preset / automatic tuning extension
+
+No format bump. Each model's `cleanup` accepts `preset` (`null`, `Object`, `Room`,
+`Outdoor`, `Vegetation`) and `autoTune` (boolean). Absent fields in existing v5 recipes
+normalize to `null` and `false`; their saved proxy settings stay authoritative. New imports
+start with `preset:null, autoTune:true`. Existing v1–v4 migrations still load normally.
+The preset is a label for the last explicitly applied defaults, not a constraint on edited
+values. Its concrete optimization/proxy values and global `walk` parameters are serialized
+in their existing fields. Tuning saves only its winning `proxy.target/error/enabled`, not
+trial geometry, reports, timings or buffers. Reopening never reruns tuning automatically.
+Invalid preset names/types or non-boolean autoTune values are rejected. HUD visibility and
+frame samples remain session-only, as do the trial report and undo history.
