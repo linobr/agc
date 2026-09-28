@@ -4,6 +4,8 @@ AGC is a local-first browser editor for turning a 3D scan into an object you can
 
 Public app: **https://linobr.github.io/agc/**. `main` contains the editor, Save/Open Project and the scan Walk Test MVP.
 
+The original Walk Test MVP is preserved as [GitHub release v1.0.0](https://github.com/linobr/agc/releases/tag/v1.0.0), pinned to `6594030`. The release is a source recovery point; Pages follows `main`.
+
 `main` is the current working, checked source. Keep completed, checked work on `main`. Never include secrets, runtime data or private user assets in Git or releases.
 
 ## Run locally
@@ -34,12 +36,14 @@ opening** keeps the current scene. Empty and primitive-only projects open direct
 
 Transforms, object names, primitive colors, body behavior, collider shape and
 visibility, reset transforms, selection, active tool and camera are restored.
+Project v2 additionally stores slope limit, step height, minimum region area and
+spawn mode/coordinates. Version-1 projects load with defaults and export as v2.
 Export during a physics test saves the edited starting transforms, not a transient
 simulation position. Opening always returns to editor mode. As in the original
 MVP, starting a physics test sets the transform-reset baseline to the edited start.
 
 There is no autosave. Export again after edits; keep both `.agc` and the GLB as
-your backup. See [the v1 format specification](AGC_PROJECT_FORMAT.md) for limits,
+your backup. See [the v2 format specification (with v1 migration)](AGC_PROJECT_FORMAT.md) for limits,
 validation and the decision against embedding large scans.
 
 ## Prototype limits
@@ -48,7 +52,7 @@ This is an editor MVP, not a game engine. It handles one GLB at a time and uses 
 
 The user's Scaniverse palm is a local-only test file and is not included in this repository. Do not commit private uploads, derived assets, credentials, browser recordings or runtime data.
 
-Next recommended development step: connected floor patches and a user-adjustable spawn, followed by scan collision preprocessing in a worker and representative device benchmarks.
+Next recommended development step: move analysis into a cancellable worker, then test representative room scans on target hardware and add explicit region selection/navigation links.
 
 ## Checks
 
@@ -70,19 +74,45 @@ The checked-in captures show the local-only start screen, the palm scan with its
 
 The private source GLB is intentionally absent. See [AGC_PROGRESS.md](AGC_PROGRESS.md) for the current main baseline, test evidence and limits.
 
-## Walk Test MVP
+## Walk Test: regions, steps and spawn
 
-Import automatically analyzes the scene once. After Move/Rotate/Scale, adding objects or changing thresholds, click **Recalculate walk surfaces**. **Walk Test** starts only when a spawn was found. **WASD / arrows** move along world X/Z (W = −Z, D = +X), **R / Respawn** resets, **Esc / Back to Editor** restores the editor camera. Gravity is enabled; jump and automatic stair stepping are intentionally absent. A fixed chase camera follows the player. Assume one scene unit equals one metre; align Y up and scale the scan before analysis.
+Import and project opening analyze the scene once. Slope, step-height and region-area input changes recalculate when committed (blur/Enter); no scan analysis runs per frame. Move/Rotate/Scale and added objects invalidate the derived data; click **Recalculate walk surfaces** afterwards. Original GLB geometry and the separate Cannon Physics Test remain unchanged.
 
-Detection uses geometric triangle winding/normals in world space, default maximum slope **40°** and minimum triangle area **0.005 m²**, configurable in the panel. Counts and summed candidate area are shown (overlaps count twice). These are candidate triangles, not connected floor regions or a navigation mesh. Heights remain separate, including stacked floors. Spawn selection tries the lowest 512 candidates, using five downward support probes and full player/headroom clearance. It can reject usable scenes; it is not a proof of safety or reachability. A missing spawn or exceeded budget keeps the editor usable with a status message.
+**WASD / arrows** move along world X/Z (W = −Z, D = +X), **R / Respawn** resets, **Esc / Back to Editor** restores the editor camera. One scene unit is assumed to be one metre; align Y up and scale the scan before analysis. The fixed chase camera does not collide with walls. There is no jump.
 
-**Collision decision:** Walk Test uses a separate kinematic controller, approximating a 1.8 m tall, 0.6 m wide capsule with five overlapping spheres against static, double-sided triangles. All scene geometry, including primitives and objects marked Physics, is frozen for this mode. A 2 m spatial hash limits nearby triangle checks; fixed 120 Hz steps, four penetration passes, gravity and normal projection provide ground contact and wall sliding. No Cannon body/shape per triangle is created. This avoids relying on Cannon's restricted trimesh shape-pair support and preserves openings that whole-scan boxes would fill. The existing Cannon Physics Test keeps its original selectable box/segment colliders. The GLB is never modified or simplified.
+### Connected regions and slope
 
-Hard analysis budgets: **100,000 triangles**, **500,000 triangle–cell references**, **4,000 triangles per cell**. Unsupported animated/instanced meshes and exceeded budgets fail visibly, without silently skipping collision triangles. Geometry is traversed once per analysis; only bounded world-space triangles and debug buffers are derived. There is no per-frame scan analysis. Large original assets still incur their normal rendering/GLB decode cost. Dense scans may require a smaller separately prepared section. This is a bounded MVP, not a demonstrated large-scan solution.
+World-space geometric normals, not noisy imported shading normals, determine walkability. **Slope Limit** defaults to **40°**, configurable **0–50°**. Steeper triangles remain colliders and cannot provide grounded support or be climbed by the rounded player feet. Reversed winding is not generally repaired.
 
-Separate toggles control candidate surfaces, actual Walk collider wireframes, and spawn/player markers. Existing **Colliders** remains the Physics Test bounds overlay. Walk settings, derived geometry, spawn and player state are transient; project v1 stays unchanged and opening a project recalculates with the current session thresholds.
+Shared edges are joined using union/find and a 1 mm coordinate key. Unmatched boundary edges can also join when both endpoints are within **3 cm**, their vertical difference is at most **2 cm**, and neighboring normals differ by at most **45°**. A vertex touch does not connect islands. Vertically separated floors stay separate. This endpoint-based method does not solve arbitrary T-junctions or unmatched subdivisions.
 
-Known difficult inputs: reversed triangle winding, dense micro-triangles below the area threshold, holes, stairs, steep/rough slopes, thin ledges, vegetation, overlapping or non-manifold surfaces, inaccurate scale and enclosed rooms without clearance. Collision is discrete rather than swept; severe penetrations and tight corners can still cause jitter. The chase camera does not collide with walls. No real private scan or target-device performance claim is implied by the synthetic tests.
+Very small triangles can contribute to a large floor: the old per-triangle area filter has been replaced by **Minimum region area**, default **0.1 m²**. Smaller isolated components are omitted from walkability, while their collision remains. Triangles with the same three vertices after 1 mm quantization are deduplicated in derived data; if duplicate winding disagrees, the more upward orientation wins. Nearby arbitrary overlapping surfaces are not merged. Area is therefore still an estimate.
+
+Each region has summed area, triangle count, area-weighted center and minimum/maximum height. The inspector displays region count, active region, area and height range using a fixed number of elements. Auto Spawn prefers the largest region with a valid spawn, trying up to 512 distributed candidates across at most 16 regions. A smaller region can win if larger ones have no tested usable spawn. Regions are geometric components, not a navigation mesh or a guarantee of reachability.
+
+### Spawn editing and validation
+
+The blue marker is visible in the editor under **Show Spawn / Player**. **Place Spawn** lets you click a rendered surface; alternatively edit **Spawn X/Y/Z** in world coordinates. **Auto Spawn / Reset** returns to the automatically chosen position. Invalid positions are shown red and blocked at Walk Test start with a reason. Manual spawn coordinates stay fixed when the scan is transformed, so recalculate and reposition them if necessary.
+
+Validation checks all five player spheres and extra respawn headroom, a walkable region beneath the center, and at least four of five support probes. Outer probes allow height changes consistent with the slope limit; one missing outer probe tolerates a small hole. Center support is mandatory. Auto candidates include a slope-dependent foot clearance. These checks do not fill holes or repair geometry; large gaps and obstacles still collide or cause falls. All saved positions are revalidated against the reopened scan.
+
+### Step-up and collision strategy
+
+The existing kinematic controller remains: a 1.8 m tall, 0.6 m wide player approximated by five overlapping spheres, double-sided static triangle collision, a 2 m spatial hash, 120 Hz fixed steps and four penetration passes. All scene objects are frozen in Walk Test. No body per triangle, no sampling that silently drops colliders, and no source-mesh reduction are used. The separate Physics Test retains selectable bounding/segmented boxes.
+
+**Step Height** defaults to **0.20 m**, bounded to **0–0.40 m**; zero disables it. A grounded, moving player probes 0.38 m ahead for the nearest walkable surface. A rise must be more than 2.5 cm and no higher than Step Height. The raised capsule and landing require clearance. The player then lifts at no more than **1.5 m/s**, with collision checks each 1/120 s step; horizontal motion stays at **3 m/s**. It never snaps across the step. Reversing/stopping, lost clearance or a 0.6 s timeout cancels the lift. Airborne players cannot initiate it. Steep faces and raised platform edges cannot provide an accidental lift from rounded-foot collision.
+
+This works for small, sufficiently wide thresholds and steps, not arbitrary stair reconstruction. Tight treads, low ceilings, jagged risers and conflicting geometry can still block movement. Collision is discrete rather than a full swept capsule: severe penetrations, narrow corners and thin features remain limitations.
+
+### Performance limits and measurement
+
+Hard limits remain **100,000 input triangles**, **500,000 triangle–cell references**, **4,000 triangles per cell**; region seam matching additionally stops at **2,000,000 comparisons**. Exceeding a budget reports a readable error and preserves the editor. Render/decode costs of the original scan remain; these tests do not establish real-scan or mobile-GPU performance. Analysis is synchronous and may briefly block the main thread; a worker is the next performance step.
+
+Run the reproducible synthetic-grid benchmark with `node scripts/benchmark-walk.js`. It measures extraction/walkability, region construction and collider indexing separately, plus total analysis including spawn search. Three runs per size, median per phase, no CI timing threshold. The Playwright suite also checks 10k/50k/100k cases for valid results and bounded structures. Benchmark measurements for this increment are recorded in [AGC_PROGRESS.md](AGC_PROGRESS.md).
+
+**Show Walkable**, **Show Collision** and **Show Spawn / Player** toggle the derived overlays. The old **Colliders** button still shows Physics Test bounds. Regions, collision structures, overlays and player state are not serialized; they are rebuilt from the original scan. Project v2 persists the walk settings and spawn, with documented defaults for v1.
+
+Known difficult inputs: inverted winding, unsupported animated/instanced meshes, large holes, sub-millimetre noise, steep or rough slopes, thin ledges, vegetation, overlapping/non-manifold geometry, wrong scale and enclosed spaces without headroom. The heuristics deliberately prefer rejecting an uncertain start over claiming a repaired scan.
 
 Production smoke check (preview server must already run):
 

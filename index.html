@@ -315,14 +315,25 @@
               <div class="section-title">WALK TEST · MVP</div>
               <p id="walkStatus" role="status" class="fine-print">Import a scan to detect walkable surfaces.</p>
               <label class="field-label">Maximum slope (°)<input id="walkSlope" type="number" min="0" max="50" value="40" /></label>
-              <label class="field-label">Minimum triangle area (m²)<input id="walkArea" type="number" min="0" max="10" step="0.001" value="0.005" /></label>
+              <label class="field-label">Minimum region area (m²)<input id="walkArea" type="number" min="0" max="10" step="0.01" value="0.1" /></label>
+              <label class="field-label">Step height (m, 0 = off)<input id="walkStep" type="number" min="0" max="0.4" step="0.05" value="0.2" /></label>
+              <p id="walkRegions" class="fine-print">Regions: 0 · Active: none</p>
+              <p id="walkTiming" class="fine-print"></p>
+              <div class="vector-field"><label>Spawn (world coordinates)</label><div>
+                <span>X</span><input id="spawnX" type="number" step="0.1" aria-label="Spawn X" />
+                <span>Y</span><input id="spawnY" type="number" step="0.1" aria-label="Spawn Y" />
+                <span>Z</span><input id="spawnZ" type="number" step="0.1" aria-label="Spawn Z" />
+              </div></div>
+              <button id="spawnPlace" class="quiet-button" aria-pressed="false">Place Spawn</button>
+              <button id="spawnAuto" class="quiet-button">Auto Spawn / Reset</button>
+              <p id="spawnStatus" role="status" class="fine-print">No spawn yet.</p>
               <button id="walkRebuild" class="quiet-button">Recalculate walk surfaces</button>
               <button id="walkBtn" class="primary-button">Walk Test</button>
               <button id="walkRespawn" class="quiet-button" hidden>Respawn</button>
-              <label class="walk-toggle"><input id="walkSurfaces" type="checkbox" /> Walkable overlay</label>
-              <label class="walk-toggle"><input id="walkColliders" type="checkbox" /> Walk collider overlay</label>
-              <label class="walk-toggle"><input id="walkMarkers" type="checkbox" checked /> Spawn / player debug</label>
-              <p class="fine-print">WASD / arrows: move · R: respawn · Esc: editor. World axes: W = −Z, D = +X. Units assumed metres. No jump or automatic steps. Settings are session-only.</p>
+              <label class="walk-toggle"><input id="walkSurfaces" type="checkbox" /> Show Walkable</label>
+              <label class="walk-toggle"><input id="walkColliders" type="checkbox" /> Show Collision</label>
+              <label class="walk-toggle"><input id="walkMarkers" type="checkbox" checked /> Show Spawn / Player</label>
+              <p class="fine-print">WASD / arrows: move · R: respawn · Esc: editor. World axes: W = −Z, D = +X. Units assumed metres. Small steps use the configured height. No jump. Spawn and walk settings are saved in the project.</p>
               <output id="walkTelemetry" class="fine-print"></output>
             </section>
             <section class="panel-section lighting-section">

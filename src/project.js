@@ -1,4 +1,5 @@
-// AGC v1 stores editor state and a reference to the original local GLB.
+// AGC v2 adds walk settings and a world-space spawn; v1 migrates in memory.
+export const DEFAULT_WALK = Object.freeze({ slope:40, stepHeight:0.2, minArea:0.1, spawnMode:"auto", spawn:null });
 export const MAX_PROJECT_BYTES = 2 * 1024 * 1024;
 export const MAX_GLB_BYTES = 250 * 1024 * 1024;
 export const fileName = (name) => name.split(/[\\/]/).at(-1);
@@ -34,7 +35,16 @@ export function parseProject(text) {
   try { p = JSON.parse(text); }
   catch { throw new Error("Invalid AGC project: the file is not valid JSON."); }
   requireValue(p?.format === "agc-project", "expected format agc-project");
-  if (p.version !== 1) throw new Error(`Unsupported AGC project version: ${String(p.version)}. This editor supports version 1.`);
+  if (![1,2].includes(p.version)) throw new Error(`Unsupported AGC project version: ${String(p.version)}. This editor supports versions 1 and 2.`);
+  if (p.version === 1) { p.walk = { ...DEFAULT_WALK }; p.version = 2; }
+  const w = p.walk;
+  requireValue(w && typeof w === 'object', 'walk settings');
+  for (const [key,min,max] of [['slope',0,50],['stepHeight',0,0.4],['minArea',0,10]])
+    requireValue(typeof w[key] === 'number' && Number.isFinite(w[key]) && w[key]>=min && w[key]<=max, `walk ${key}`);
+  requireValue(['auto','manual'].includes(w.spawnMode), 'walk spawn mode');
+  if (w.spawn !== null) vector(w.spawn,3,'walk spawn');
+  requireValue(w.spawnMode !== 'manual' || w.spawn !== null, 'manual spawn coordinates');
+  p.walk = { slope:w.slope, stepHeight:w.stepHeight, minArea:w.minArea, spawnMode:w.spawnMode, spawn:w.spawn === null ? null : [...w.spawn] };
   requireValue(Array.isArray(p.objects) && p.objects.length <= 500, "objects must be an array with at most 500 entries");
   const ids = new Set();
   let models = 0;

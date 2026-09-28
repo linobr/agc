@@ -36,3 +36,10 @@ export function roomFile() {
   return scanFile([-6,2,-6, -6,2,6, 6,2,6, 6,2,-6,
     0,2,-6, 0,5,-6, 0,5,6, 0,2,6], [0,1,2,0,2,3,4,5,6,4,6,7]);
 }
+
+export function stepFile(height = 0.15) {
+  const positions = [-6,0,-4,-6,0,4,6,0,4,6,0,-4,
+    0,0,-3,3,0,-3,3,height,-3,0,height,-3,0,0,3,3,0,3,3,height,3,0,height,3];
+  const box = [0,2,1,0,3,2,4,5,6,4,6,7,0,1,5,0,5,4,3,7,6,3,6,2,1,2,6,1,6,5,0,4,7,0,7,3];
+  return scanFile(positions,[0,1,2,0,2,3,...box.map(i=>i+4)]);
+}

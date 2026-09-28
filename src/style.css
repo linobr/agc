@@ -1132,3 +1132,4 @@ button {
   accent-color: #245d48;
 }
 #walkStatus, #walkTelemetry { font-size: 12px; line-height: 1.5; }
+#walkRegions, #walkTiming, #spawnStatus { font-size: 11px; line-height: 1.5; }

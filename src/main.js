@@ -5,7 +5,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import * as CANNON from "cannon-es";
 import "./style.css";
 import { analyzeWalk, WalkPlayer, triangleOverlay } from "./walk.js";
-import { MAX_PROJECT_BYTES, MAX_GLB_BYTES, fileName, scanMetadata, parseProject, serializePose, restorePose } from "./project.js";
+import { DEFAULT_WALK, MAX_PROJECT_BYTES, MAX_GLB_BYTES, fileName, scanMetadata, parseProject, serializePose, restorePose } from "./project.js";
 
 const $ = (id) => document.getElementById(id);
 const canvas = $("sceneCanvas"),
@@ -79,6 +79,7 @@ let objects = [],
   loadToken = 0,
   toastTimer,
   pendingProject = null;
+let walkSettings = { ...DEFAULT_WALK }, spawnMode = false;
 let walkData = null, walkPlayer = null, walkSignature = '', walkView = null, walkAccumulator = 0;
 const walkHelpers = new THREE.Group(), walkKeys = new Set();
 scene.add(walkHelpers);
@@ -104,6 +105,7 @@ function notify(message) {
 }
 function setTool(next) {
   if (walkPlayer) return;
+  setSpawnMode(false);
   tool = next;
   document
     .querySelectorAll(".rail-tool[data-tool]")
@@ -314,6 +316,7 @@ async function importFile(file) {
     for (const old of [...objects].filter((o) => o.kind === "model")) removeEntry(old);
     const entry = addEntry(root, fileName(file.name).replace(/\.glb$/i, ""));
     entry.source = source;
+    walkSettings.spawnMode = "auto"; walkSettings.spawn = null;
     rebuildWalk();
     projectMessage("Scan imported. Save Project downloads settings; keep the original GLB. No autosave.");
     notify(`Imported ${source.fileName} · ${entry.meshes} meshes`);
@@ -344,7 +347,8 @@ function saveProject() {
   }
   try {
     const project = {
-      format: "agc-project", version: 1,
+      format: "agc-project", version: 2,
+      walk: { ...walkSettings },
       objects: objects.map((o) => ({
         id: o.id, name: o.name, kind: o.kind,
         bodyType: o.bodyType, collider: o.collider,
@@ -469,6 +473,8 @@ function applyProject(project, modelRoot = null) {
   orbit.update();
   orbit.enableDamping = true;
   clearPendingProject();
+  walkSettings = { ...project.walk };
+  $("walkSlope").value = walkSettings.slope; $("walkArea").value = walkSettings.minArea; $("walkStep").value = walkSettings.stepHeight;
   rebuildWalk();
   projectMessage("Project opened. Editor transforms and colliders restored. No autosave; use Save Project after changes.");
 }
@@ -500,7 +506,7 @@ function select(entry) {
   $("colliderShape").value = entry?.collider || "box";
   if (entry) setCollider(entry.collider);
   else $("collisionDimensions").textContent = "No collider yet";
-  if (entry && !testMode && !walkPlayer && tool !== "select") {
+  if (entry && !testMode && !walkPlayer && !spawnMode && tool !== "select") {
     transform.attach(entry.root);
     transform.enabled = true;
   }
@@ -695,6 +701,7 @@ function makeBody(entry) {
   return body;
 }
 function startTest() {
+  setSpawnMode(false);
   if (walkPlayer) stopWalk();
   if (testMode) return;
   testMode = true;
@@ -719,6 +726,7 @@ function startTest() {
   $("resetTestBanner").onclick = resetTest;
 }
 function resetTest() {
+  setSpawnMode(false);
   if (walkPlayer) stopWalk();
   if (!testMode) return;
   for (const e of objects) {
@@ -754,6 +762,12 @@ function canvasPointer(e) {
 }
 function onPointerDown(e) {
   if (walkPlayer) return;
+  if (spawnMode && e.button === 0) {
+    canvasPointer(e);
+    const hit = raycaster.intersectObjects(objects.map(o=>o.root),true)[0];
+    if (hit) { setManualSpawn(hit.point.clone().add(new THREE.Vector3(0,0.04,0)).toArray()); setSpawnMode(false); }
+    return;
+  }
   if (e.button !== 0) return;
   canvasPointer(e);
   if (testMode) {
@@ -852,6 +866,9 @@ function signature() {
 function disposeWalk() {
   for (const node of [...walkHelpers.children]) { walkHelpers.remove(node); cleanNode(node); }
   walkData = null; walkSignature = '';
+  $('walkRegions').textContent = 'Regions: not calculated';
+  $('walkTiming').textContent = '';
+  $('spawnStatus').textContent = 'Spawn unvalidated. Recalculate walk surfaces.';
 }
 function invalidateWalk() {
   if (walkData && !walkPlayer && signature() !== walkSignature) {
@@ -863,34 +880,79 @@ function rebuildWalk() {
   if (walkPlayer || testMode) return false;
   disposeWalk();
   try {
-    const slope = Number($("walkSlope").value), minArea = Number($("walkArea").value);
+    const slope = Number($("walkSlope").value), minArea = Number($("walkArea").value), stepHeight = Number($("walkStep").value);
     if (!Number.isFinite(slope) || slope<0 || slope>50 || !Number.isFinite(minArea) || minArea<0 || minArea>10)
       throw new Error('Use slope 0–50° and minimum area 0–10 m².');
+    if (!Number.isFinite(stepHeight) || stepHeight<0 || stepHeight>0.4) throw new Error('Use step height 0–0.4 m.');
+    Object.assign(walkSettings,{slope,minArea,stepHeight});
     if (!objects.some(e => e.kind === 'model')) throw new Error('Import a GLB scan first.');
-    walkData = analyzeWalk(objects, { slope, minArea });
+    walkData = analyzeWalk(objects, { slope, minArea, stepHeight });
     walkSignature = signature();
     const surfaces = triangleOverlay(walkData.candidates, 0x20c777);
     surfaces.name = 'surfaces'; walkHelpers.add(surfaces);
     const colliders = triangleOverlay(walkData.triangles, 0xec803b, true);
     colliders.name = 'colliders'; walkHelpers.add(colliders);
-    if (walkData.spawn) {
-      const marker = new THREE.Mesh(new THREE.SphereGeometry(0.15,12,8), new THREE.MeshBasicMaterial({color:0x3377ff}));
-      marker.position.copy(walkData.spawn); marker.name = 'spawn'; walkHelpers.add(marker);
-    }
-    $("walkStatus").textContent = `${walkData.candidates.length} walkable candidates · ${walkData.area.toFixed(1)} m² · ${walkData.triangles.length} collision triangles. ${walkData.spawn ? 'Spawn found. Heuristic only.' : 'No safe spawn found. Align/scale scan or adjust thresholds and recalculate.'}`;
+    if (walkSettings.spawnMode === 'auto') walkSettings.spawn = walkData.autoSpawn?.toArray() || null;
+    const marker = new THREE.Mesh(new THREE.SphereGeometry(0.15,12,8), new THREE.MeshBasicMaterial({color:0x3377ff}));
+    marker.name = 'spawn'; walkHelpers.add(marker);
+    updateSpawn();
+    $('walkStatus').textContent = `${walkData.candidates.length} walkable candidates · ${walkData.area.toFixed(1)} m² · ${walkData.triangles.length} collision triangles. ${walkData.autoSpawn ? 'Spawn found. Heuristic only.' : 'No safe spawn found. Align/scale scan or adjust thresholds and recalculate.'} ${walkData.duplicates} duplicates removed; ${walkData.filteredRegions} small regions filtered.`;
+    const timing = walkData.timings;
+    $('walkTiming').textContent = `Analysis ${timing.walkabilityMs.toFixed(1)} ms · Regions ${timing.regionMs.toFixed(1)} ms · Collider ${timing.colliderMs.toFixed(1)} ms`;
     showWalkHelpers();
     return !!walkData.spawn;
   } catch (error) { disposeWalk(); $("walkStatus").textContent = error.message; return false; }
 }
+function setSpawnMode(enabled) {
+  spawnMode = enabled;
+  $('spawnPlace').setAttribute('aria-pressed',String(enabled));
+  $('spawnPlace').textContent = enabled ? 'Click a surface…' : 'Place Spawn';
+  if (enabled) { transform.detach(); transform.enabled = false; }
+  else if (selected && !testMode && !walkPlayer && tool !== 'select') { transform.attach(selected.root); transform.enabled = true; }
+}
+function setManualSpawn(position) {
+  if (walkPlayer || testMode) return;
+  walkSettings.spawnMode = 'manual'; walkSettings.spawn = position;
+  updateSpawn();
+}
+function updateSpawn() {
+  const position = walkSettings.spawn ? new THREE.Vector3().fromArray(walkSettings.spawn) : null;
+  ['spawnX','spawnY','spawnZ'].forEach((id,i) => { $(id).value = position ? Number(position.getComponent(i).toFixed(4)) : ''; });
+  if (!walkData) { $('spawnStatus').textContent = 'Spawn unvalidated. Recalculate walk surfaces.'; return false; }
+  const result = walkData.validateSpawn(position);
+  walkData.spawn = result.valid ? position : null;
+  if (result.valid) walkData.activeRegion = walkData.regions.find(r=>r.id===result.regionId);
+  const marker = walkHelpers.getObjectByName('spawn');
+  if (marker && position && position.toArray().every(Number.isFinite)) {
+    marker.position.copy(position); marker.material.color.set(result.valid ? 0x3377ff : 0xee3333);
+  }
+  const region = walkData.activeRegion;
+  $('walkRegions').textContent = `Regions: ${walkData.regions.length} · Active: ${region ? region.id : 'none'} · ${region ? region.area.toFixed(2) : '0'} m²${region ? ` · ${region.triangleCount} triangles · height ${region.minHeight.toFixed(2)}–${region.maxHeight.toFixed(2)} m` : ''}`;
+  $('spawnStatus').textContent = `${walkSettings.spawnMode === 'manual' ? 'Manual' : 'Auto'}: ${result.reason}${result.valid ? '' : ' Walk Test cannot start.'}`;
+  showWalkHelpers();
+  return result.valid;
+}
+$('spawnPlace').onclick = () => { if (!walkPlayer && !testMode) setSpawnMode(!spawnMode); };
+$('spawnAuto').onclick = () => {
+  if (walkPlayer || testMode) return;
+  walkSettings.spawnMode = 'auto'; walkSettings.spawn = walkData?.autoSpawn?.toArray() || null;
+  setSpawnMode(false); updateSpawn();
+};
+for (const id of ['spawnX','spawnY','spawnZ']) $(id).onchange = () => {
+  const values = ['spawnX','spawnY','spawnZ'].map(id=>$(id).value === '' ? NaN : Number($(id).value));
+  if (!values.every(n=>Number.isFinite(n) && Math.abs(n)<=1e6)) { $('spawnStatus').textContent = 'Use finite spawn coordinates within ±1,000,000.'; return; }
+  setManualSpawn(values);
+};
 function showWalkHelpers() {
-  for (const o of walkHelpers.children) o.visible = $(o.name === 'surfaces' ? 'walkSurfaces' : o.name === 'colliders' ? 'walkColliders' : 'walkMarkers').checked;
+  for (const o of walkHelpers.children) o.visible = $(o.name === 'surfaces' ? 'walkSurfaces' : o.name === 'colliders' ? 'walkColliders' : 'walkMarkers').checked && (o.name !== 'spawn' || !!walkSettings.spawn);
 }
 function startWalk() {
   if (!$("loadingOverlay").hidden || pendingProject) return;
   resetTest();
   invalidateWalk();
   if (!walkData) { $("walkStatus").textContent = 'Recalculate walk surfaces first.'; return; }
-  if (!walkData.spawn) return;
+  if (!updateSpawn()) return;
+  setSpawnMode(false);
   walkView = { position: camera.position.clone(), target: orbit.target.clone(), near: camera.near, far: camera.far };
   walkPlayer = new WalkPlayer(walkData); walkAccumulator = 0; walkKeys.clear();
   const visual = new THREE.Mesh(new THREE.CapsuleGeometry(0.3,1.2,4,8),new THREE.MeshBasicMaterial({color:0x2244cc,wireframe:true}));
@@ -900,7 +962,7 @@ function startWalk() {
   camera.near = 0.03; camera.updateProjectionMatrix();
   $("walkBtn").textContent = 'Back to Editor'; $("walkRespawn").hidden = false;
   $("sceneStatus").textContent = 'WALK TEST';
-  for (const id of ['walkRebuild','walkSlope','walkArea','testBtn','focusBtn','groundBtn','resetTransformBtn','uniformScale','colliderShape']) $(id).disabled = true;
+  for (const id of ['walkRebuild','walkSlope','walkArea','walkStep','spawnPlace','spawnAuto','spawnX','spawnY','spawnZ','testBtn','focusBtn','groundBtn','resetTransformBtn','uniformScale','colliderShape']) $(id).disabled = true;
 }
 function stopWalk() {
   if (!walkPlayer) return;
@@ -911,7 +973,7 @@ function stopWalk() {
   walkView = null; orbit.enabled = true; orbit.update(); ground.visible = true; grid.visible = true;
   $("walkBtn").textContent = 'Walk Test'; $("walkRespawn").hidden = true; $("walkTelemetry").textContent = '';
   $("sceneStatus").textContent = 'EDITOR MODE';
-  for (const id of ['walkRebuild','walkSlope','walkArea','testBtn','focusBtn','groundBtn','resetTransformBtn','uniformScale','colliderShape']) $(id).disabled = false;
+  for (const id of ['walkRebuild','walkSlope','walkArea','walkStep','spawnPlace','spawnAuto','spawnX','spawnY','spawnZ','testBtn','focusBtn','groundBtn','resetTransformBtn','uniformScale','colliderShape']) $(id).disabled = false;
   select(selected); setTool(tool);
 }
 function updateWalk(dt) {
@@ -933,7 +995,7 @@ $('walkBtn').onclick = () => walkPlayer ? stopWalk() : startWalk();
 function respawnWalk() { if (walkPlayer) { walkPlayer.respawn(); updateWalk(0); } }
 $('walkRespawn').onclick = respawnWalk;
 for (const id of ['walkSurfaces','walkColliders','walkMarkers']) $(id).onchange = showWalkHelpers;
-for (const id of ['walkSlope','walkArea']) $(id).onchange = () => { disposeWalk(); $('walkStatus').textContent = 'Settings changed. Recalculate walk surfaces.'; };
+for (const id of ['walkSlope','walkArea','walkStep']) $(id).onchange = rebuildWalk;
 window.addEventListener('keydown', e => {
   if (!walkPlayer || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
   const k=e.key.toLowerCase();
@@ -1063,6 +1125,7 @@ viewport.addEventListener("drop", (e) => {
   importFile(e.dataTransfer.files?.[0]);
 });
 window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && spawnMode) setSpawnMode(false);
   if (e.key === "Escape" && testMode) resetTest();
   if (!walkPlayer && e.key.toLowerCase() === "f" && selected) focus();
 });
