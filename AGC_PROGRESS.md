@@ -2,7 +2,7 @@
 
 Stand: 2026-09-28. Repo `linobr/agc`.
 
-- `main` enthält den geprüften MVP (`0c80cba`), Save/Open Project (`6b145dd`) und GitHub Pages (`67e84f6`). Lokaler und Remote-Stand vor diesem Dokumentations-Cleanup: `67e84f660be26707c50d1703365cac13e36d9969`.
+- `main` enthält jetzt zusätzlich den Walk-Test-MVP (Details und aktuelle Prüfung unten). Basis: Editor (`0c80cba`), Save/Open Project (`6b145dd`) und GitHub Pages (`67e84f6`).
 - Öffentliche App: **https://linobr.github.io/agc/**. Das Pages-Deployment mit `67e84f6` wurde erfolgreich getestet.
 - Git-Strategie: `main` ist der aktuelle funktionierende und geprüfte Source-Stand. Featurebranches nur temporär für konkrete Arbeiten; wichtige stabile Wiederherstellungspunkte zusätzlich mit Tags / GitHub Releases markieren. Secrets, Runtime- und private Nutzerdaten bleiben außerhalb von Git und Releases.
 
@@ -53,7 +53,21 @@ Nur Dokumentation und `package.json`-Homepage aktualisiert; keine Funktions- ode
 - Original-GLB bleibt für Scanprojekte notwendig; kein Autosave, keine Versionsmigration, nur ein Scan gleichzeitig.
 - Ohne Web Crypto ist die Scanreferenz nur durch Dateiname/Größe geprüft. Projekte mit SHA-256 verlangen HTTPS oder localhost; fehlende Prüfmöglichkeit führt zu einem verständlichen Fehler.
 - Nur selbständige GLB-Dateien; externe Textur-/Bufferreferenzen werden abgewiesen.
-- Collider bleiben grobe Approximationen, keine reparierten oder garantiert begehbaren Scanflächen.
+- Physics Test behält grobe Boxen; Walk Test nutzt statische Dreiecke. Keine reparierten oder garantiert begehbaren Scanflächen.
 - Browserprüfungen mit Chromium/SwiftShader belegen keine Hardware-/Mobil-GPU-Performance. Große echte Scans wurden in diesem Turn nicht verwendet; keine privaten Assets im Commit.
 - Bestehende Vite-Warnung für einen JS-Chunk über 500 kB bleibt bestehen.
-- Empfohlener nächster Entwicklungsschritt: begehbare Scanflächen / bessere scanabhängige Collider. Die Physikqualität gezielt mit repräsentativen Scans auf dem Zielgerät prüfen.
+- Nächster Schritt: zusammenhängende Bodenregionen, manueller Spawn, Worker-Vorverarbeitung und repräsentative Zielgerätetests.
+
+## Walk Test MVP — 28.09.2026
+
+- Auf sauberem `main` nach `git pull --ff-only origin main` implementiert.
+- Weltkoordinaten-Normalen, Neigungs- und Flächenfilter erkennen Bodendreiecke; Anzahl/Fläche und abschaltbare Overlays im Inspector. Keine vollständige Rekonstruktion, keine zusammenhängenden Regionen.
+- Spawn auf niedrigen Kandidaten mit fünf Auflageproben und Spieler-/Kopffreiheitsprüfung. Fehlender Spawn verhindert den Start verständlich.
+- Eigener statischer Dreieckskollisionspfad für Walk Test: räumliches 2-m-Raster, 100.000 Dreiecke, 500.000 Referenzen, 4.000 Dreiecke/Zelle als harte Grenzen. Keine Dreiecksbodies, kein Sampling mit Kollisionslöchern, Original-GLB unverändert. Bestehender Cannon-Physiktest bleibt erhalten.
+- Spieler mit fünf Kugeln als grober Kapsel, Schwerkraft, 120-Hz-Schritten, Wandkollision und Bodenhaftung. WASD/Pfeile, R/Respawn, Esc/zurück zum Editor. Keine Sprünge, kein Treppensteigen; feste Folgekamera ohne Wandkollision.
+- Transformationen verwerfen abgeleitete Daten; explizite Neuberechnung nötig. Import/Projektöffnung analysiert einmal. Kein Analysepfad im Renderloop.
+- Format bleibt v1. Neue Einstellungen und Spawn sind sitzungsbezogen; Projekte enthalten keine abgeleiteten Geometriedaten. Save/Open und Editoransicht bleiben erhalten.
+- Neue Tests nutzen ausschließlich generierte Scans: Boden, Wand, fehlende Kopffreiheit, fehlender Boden, Grenzwerte, Bewegung, Fall/Stabilität, Respawn, Editor-Rückkehr und Neuberechnung nach Transformation.
+- Grenzen: fehlerhafte Windung, Löcher, feine/raue Dreiecke, Treppen, Vegetation, falscher Maßstab, diskrete Kollisionsauflösung und Kameraclipping. Große reale Scans wurden nicht als Leistungsbeweis verwendet. Details und technische Entscheidung siehe README.
+
+Prüfung dieses MVP: `npm run build` erfolgreich (731 kB JS / 190 kB gzip; bekannte Chunkwarnung), `npm test` **11/11 bestanden**, Audit **0 Schwachstellen**, `git diff --check` erfolgreich. Produktions-Smoke über `scripts/verify-production.js` am Preview: HTTP 200, keine JS/CSS-Fehler, Import/Walk/Boden/Bewegung/Respawn/Editor erfolgreich. Screenshot des Produktionsbuilds visuell geprüft; keine privaten Scans verwendet. Produktions-Smoke nach UI-/Statuskorrekturen erneut erfolgreich; Abschluss-Testlauf ebenfalls vor dem Push.

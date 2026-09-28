@@ -4,6 +4,7 @@ import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import * as CANNON from "cannon-es";
 import "./style.css";
+import { analyzeWalk, WalkPlayer, triangleOverlay } from "./walk.js";
 import { MAX_PROJECT_BYTES, MAX_GLB_BYTES, fileName, scanMetadata, parseProject, serializePose, restorePose } from "./project.js";
 
 const $ = (id) => document.getElementById(id);
@@ -78,6 +79,9 @@ let objects = [],
   loadToken = 0,
   toastTimer,
   pendingProject = null;
+let walkData = null, walkPlayer = null, walkSignature = '', walkView = null, walkAccumulator = 0;
+const walkHelpers = new THREE.Group(), walkKeys = new Set();
+scene.add(walkHelpers);
 const raycaster = new THREE.Raycaster(),
   pointer = new THREE.Vector2(),
   planeHit = new THREE.Vector3();
@@ -99,6 +103,7 @@ function notify(message) {
   toastTimer = setTimeout(() => el.classList.remove("show"), 2800);
 }
 function setTool(next) {
+  if (walkPlayer) return;
   tool = next;
   document
     .querySelectorAll(".rail-tool[data-tool]")
@@ -219,6 +224,7 @@ function addEntry(root, name, kind = "model") {
   return entry;
 }
 function removeEntry(entry) {
+  disposeWalk();
   if (!entry) return;
   if (entry.body) world.removeBody(entry.body);
   scene.remove(entry.root, entry.overlay);
@@ -308,6 +314,7 @@ async function importFile(file) {
     for (const old of [...objects].filter((o) => o.kind === "model")) removeEntry(old);
     const entry = addEntry(root, fileName(file.name).replace(/\.glb$/i, ""));
     entry.source = source;
+    rebuildWalk();
     projectMessage("Scan imported. Save Project downloads settings; keep the original GLB. No autosave.");
     notify(`Imported ${source.fileName} · ${entry.meshes} meshes`);
   } catch (error) {
@@ -347,7 +354,7 @@ function saveProject() {
       })),
       editor: {
         selectedId: selected?.id || null, tool, collidersVisible,
-        camera: { position: camera.position.toArray(), target: orbit.target.toArray(), near: camera.near, far: camera.far },
+        camera: { position: (walkView?.position || camera.position).toArray(), target: (walkView?.target || orbit.target).toArray(), near: walkView?.near ?? camera.near, far: walkView?.far ?? camera.far },
       },
     };
     const text = JSON.stringify(project, null, 2);
@@ -462,6 +469,7 @@ function applyProject(project, modelRoot = null) {
   orbit.update();
   orbit.enableDamping = true;
   clearPendingProject();
+  rebuildWalk();
   projectMessage("Project opened. Editor transforms and colliders restored. No autosave; use Save Project after changes.");
 }
 function select(entry) {
@@ -492,7 +500,7 @@ function select(entry) {
   $("colliderShape").value = entry?.collider || "box";
   if (entry) setCollider(entry.collider);
   else $("collisionDimensions").textContent = "No collider yet";
-  if (entry && !testMode && tool !== "select") {
+  if (entry && !testMode && !walkPlayer && tool !== "select") {
     transform.attach(entry.root);
     transform.enabled = true;
   }
@@ -524,6 +532,7 @@ function focus(entry = selected) {
   orbit.update();
 }
 function refreshCollider(entry) {
+  invalidateWalk();
   if (!entry) return;
   const b = localBoundsFor(entry.root),
     worldCenter = entry.root.localToWorld(b.center.clone()),
@@ -573,7 +582,7 @@ function syncInspector() {
   refreshCollider(selected);
 }
 function applyInput(input) {
-  if (!selected || testMode) return;
+  if (!selected || testMode || walkPlayer) return;
   const key = input.dataset.axis,
     kind = input.dataset.vector,
     n = Number(input.value);
@@ -590,7 +599,7 @@ function applyInput(input) {
   syncInspector();
 }
 function setBodyType(type) {
-  if (!selected || testMode) return;
+  if (!selected || testMode || walkPlayer) return;
   selected.bodyType = type;
   document
     .querySelectorAll("[data-body]")
@@ -614,6 +623,7 @@ function setCollider(name) {
       : "Fast box approximation. Scan detail is visual only.";
 }
 function groundSelected() {
+  if (walkPlayer) return;
   if (!selected) return;
   const b = boundsFor(selected.root);
   selected.root.position.y -= b.box.min.y;
@@ -621,6 +631,7 @@ function groundSelected() {
   syncInspector();
 }
 function resetTransform() {
+  if (walkPlayer) return;
   if (!selected) return;
   selected.root.position.copy(selected.initial.position);
   selected.root.quaternion.copy(selected.initial.quaternion);
@@ -684,6 +695,7 @@ function makeBody(entry) {
   return body;
 }
 function startTest() {
+  if (walkPlayer) stopWalk();
   if (testMode) return;
   testMode = true;
   for (const entry of objects) {
@@ -707,6 +719,7 @@ function startTest() {
   $("resetTestBanner").onclick = resetTest;
 }
 function resetTest() {
+  if (walkPlayer) stopWalk();
   if (!testMode) return;
   for (const e of objects) {
     if (e.body) world.removeBody(e.body);
@@ -740,6 +753,7 @@ function canvasPointer(e) {
   raycaster.setFromCamera(pointer, camera);
 }
 function onPointerDown(e) {
+  if (walkPlayer) return;
   if (e.button !== 0) return;
   canvasPointer(e);
   if (testMode) {
@@ -832,11 +846,113 @@ canvas.addEventListener("pointerdown", onPointerDown);
 canvas.addEventListener("pointermove", onPointerMove);
 canvas.addEventListener("pointerup", onPointerUp);
 canvas.addEventListener("pointercancel", onPointerUp);
+function signature() {
+  return JSON.stringify(objects.map(e => [e.id, ...e.root.position.toArray(), ...e.root.quaternion.toArray(), ...e.root.scale.toArray()]));
+}
+function disposeWalk() {
+  for (const node of [...walkHelpers.children]) { walkHelpers.remove(node); cleanNode(node); }
+  walkData = null; walkSignature = '';
+}
+function invalidateWalk() {
+  if (walkData && !walkPlayer && signature() !== walkSignature) {
+    disposeWalk();
+    $("walkStatus").textContent = 'Scene changed. Recalculate walk surfaces before Walk Test.';
+  }
+}
+function rebuildWalk() {
+  if (walkPlayer || testMode) return false;
+  disposeWalk();
+  try {
+    const slope = Number($("walkSlope").value), minArea = Number($("walkArea").value);
+    if (!Number.isFinite(slope) || slope<0 || slope>50 || !Number.isFinite(minArea) || minArea<0 || minArea>10)
+      throw new Error('Use slope 0–50° and minimum area 0–10 m².');
+    if (!objects.some(e => e.kind === 'model')) throw new Error('Import a GLB scan first.');
+    walkData = analyzeWalk(objects, { slope, minArea });
+    walkSignature = signature();
+    const surfaces = triangleOverlay(walkData.candidates, 0x20c777);
+    surfaces.name = 'surfaces'; walkHelpers.add(surfaces);
+    const colliders = triangleOverlay(walkData.triangles, 0xec803b, true);
+    colliders.name = 'colliders'; walkHelpers.add(colliders);
+    if (walkData.spawn) {
+      const marker = new THREE.Mesh(new THREE.SphereGeometry(0.15,12,8), new THREE.MeshBasicMaterial({color:0x3377ff}));
+      marker.position.copy(walkData.spawn); marker.name = 'spawn'; walkHelpers.add(marker);
+    }
+    $("walkStatus").textContent = `${walkData.candidates.length} walkable candidates · ${walkData.area.toFixed(1)} m² · ${walkData.triangles.length} collision triangles. ${walkData.spawn ? 'Spawn found. Heuristic only.' : 'No safe spawn found. Align/scale scan or adjust thresholds and recalculate.'}`;
+    showWalkHelpers();
+    return !!walkData.spawn;
+  } catch (error) { disposeWalk(); $("walkStatus").textContent = error.message; return false; }
+}
+function showWalkHelpers() {
+  for (const o of walkHelpers.children) o.visible = $(o.name === 'surfaces' ? 'walkSurfaces' : o.name === 'colliders' ? 'walkColliders' : 'walkMarkers').checked;
+}
+function startWalk() {
+  if (!$("loadingOverlay").hidden || pendingProject) return;
+  resetTest();
+  invalidateWalk();
+  if (!walkData) { $("walkStatus").textContent = 'Recalculate walk surfaces first.'; return; }
+  if (!walkData.spawn) return;
+  walkView = { position: camera.position.clone(), target: orbit.target.clone(), near: camera.near, far: camera.far };
+  walkPlayer = new WalkPlayer(walkData); walkAccumulator = 0; walkKeys.clear();
+  const visual = new THREE.Mesh(new THREE.CapsuleGeometry(0.3,1.2,4,8),new THREE.MeshBasicMaterial({color:0x2244cc,wireframe:true}));
+  visual.name = 'player'; walkHelpers.add(visual); showWalkHelpers();
+  transform.detach(); transform.enabled = false; orbit.enabled = false;
+  ground.visible = false; grid.visible = false;
+  camera.near = 0.03; camera.updateProjectionMatrix();
+  $("walkBtn").textContent = 'Back to Editor'; $("walkRespawn").hidden = false;
+  $("sceneStatus").textContent = 'WALK TEST';
+  for (const id of ['walkRebuild','walkSlope','walkArea','testBtn','focusBtn','groundBtn','resetTransformBtn','uniformScale','colliderShape']) $(id).disabled = true;
+}
+function stopWalk() {
+  if (!walkPlayer) return;
+  walkPlayer = null; walkKeys.clear();
+  const visual = walkHelpers.getObjectByName('player'); walkHelpers.remove(visual); cleanNode(visual);
+  camera.position.copy(walkView.position); orbit.target.copy(walkView.target);
+  camera.near = walkView.near; camera.far = walkView.far; camera.updateProjectionMatrix();
+  walkView = null; orbit.enabled = true; orbit.update(); ground.visible = true; grid.visible = true;
+  $("walkBtn").textContent = 'Walk Test'; $("walkRespawn").hidden = true; $("walkTelemetry").textContent = '';
+  $("sceneStatus").textContent = 'EDITOR MODE';
+  for (const id of ['walkRebuild','walkSlope','walkArea','testBtn','focusBtn','groundBtn','resetTransformBtn','uniformScale','colliderShape']) $(id).disabled = false;
+  select(selected); setTool(tool);
+}
+function updateWalk(dt) {
+  if (!walkPlayer) return;
+  let x = Number(walkKeys.has('d') || walkKeys.has('arrowright'))-Number(walkKeys.has('a') || walkKeys.has('arrowleft'));
+  let z = Number(walkKeys.has('s') || walkKeys.has('arrowdown'))-Number(walkKeys.has('w') || walkKeys.has('arrowup'));
+  const length = Math.hypot(x,z) || 1; x/=length; z/=length;
+  walkAccumulator += dt;
+  while (walkAccumulator >= 1/120) { walkPlayer.step(1/120,x,z); walkAccumulator -= 1/120; }
+  const p = walkPlayer.position;
+  walkHelpers.getObjectByName('player').position.copy(p).y += 0.9;
+  // Fixed world-axis chase camera: no pointer lock required.
+  camera.position.copy(p).add(new THREE.Vector3(0,2.5,4));
+  camera.lookAt(p.clone().add(new THREE.Vector3(0,1,0)));
+  $("walkTelemetry").textContent = `Player: ${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)} · ${walkPlayer.grounded ? 'grounded' : 'falling'}`;
+}
+$('walkRebuild').onclick = rebuildWalk;
+$('walkBtn').onclick = () => walkPlayer ? stopWalk() : startWalk();
+function respawnWalk() { if (walkPlayer) { walkPlayer.respawn(); updateWalk(0); } }
+$('walkRespawn').onclick = respawnWalk;
+for (const id of ['walkSurfaces','walkColliders','walkMarkers']) $(id).onchange = showWalkHelpers;
+for (const id of ['walkSlope','walkArea']) $(id).onchange = () => { disposeWalk(); $('walkStatus').textContent = 'Settings changed. Recalculate walk surfaces.'; };
+window.addEventListener('keydown', e => {
+  if (!walkPlayer || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+  const k=e.key.toLowerCase();
+  if (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k)) { e.preventDefault(); walkKeys.add(k); }
+  if (k==='r') respawnWalk();
+  if (k==='escape') stopWalk();
+});
+window.addEventListener('keyup', e => walkKeys.delete(e.key.toLowerCase()));
+window.addEventListener('blur', () => walkKeys.clear());
+document.addEventListener('visibilitychange', () => walkKeys.clear());
+
+let frameDelta = 0;
 function loop() {
   requestAnimationFrame(loop);
-  orbit.update();
+  if (!walkPlayer) orbit.update();
+  frameDelta = Math.min(clock.getDelta(), 0.05);
+  updateWalk(frameDelta);
   if (testMode) {
-    world.step(1 / 60, Math.min(clock.getDelta(), 0.05), 3);
+    world.step(1 / 60, frameDelta, 3);
     for (const e of objects) {
       if (!e.body || e.body.type === CANNON.Body.STATIC) continue;
       e.root.position.set(
@@ -948,10 +1064,11 @@ viewport.addEventListener("drop", (e) => {
 });
 window.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && testMode) resetTest();
-  if (e.key.toLowerCase() === "f" && selected) focus();
+  if (!walkPlayer && e.key.toLowerCase() === "f" && selected) focus();
 });
 if (import.meta.env.DEV)
   window.agcDebug = {
+    get walk() { return { data: walkData, player: walkPlayer }; },
     get objects() {
       return objects;
     },
