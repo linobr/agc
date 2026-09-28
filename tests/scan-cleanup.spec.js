@@ -61,7 +61,7 @@ const legacy={format:'agc-project',version:1,objects:[],editor:{selectedId:null,
 test('v1 v2 v3 projects migrate to v4 and presentation values are validated',()=>{
   for(const version of [1,2,3]) {
     const p={...legacy,version,walk:{slope:40,stepHeight:.2,minArea:.1,spawnMode:'auto',spawn:null},gameplay:[]};
-    const parsed=parseProject(JSON.stringify(p));expect(parsed.version).toBe(4);expect(parsed.presentation.lighting).toBe('studio');
+    const parsed=parseProject(JSON.stringify(p));expect(parsed.version).toBe(5);expect(parsed.presentation.lighting).toBe('studio');
   }
   const p=parseProject(JSON.stringify(legacy));p.presentation.exposure=10;expect(()=>parseProject(JSON.stringify(p))).toThrow('presentation');
 });
@@ -76,7 +76,7 @@ test('save/open preserves cleanup, crop, mode and lighting; reset restores Origi
   await page.locator('#cropRemove').click();await expect(page.locator('#cleanupStatus')).toContainText('Applied');
   await page.locator('#lightingMode').selectOption('neutral'); await page.locator('#backgroundMode').selectOption('dark');
   const download=page.waitForEvent('download');await page.locator('#exportBtn').click();const path=test.info().outputPath('cleanup.agc');await(await download).saveAs(path);
-  const p=JSON.parse(await readFile(path,'utf8'));expect(p.version).toBe(4);expect(p.gameplay).toHaveLength(1);expect(p.objects[0].cleanup.crop.operation).toBe('remove');expect(p.presentation.lighting).toBe('neutral');
+  const p=JSON.parse(await readFile(path,'utf8'));expect(p.version).toBe(5);expect(p.gameplay).toHaveLength(1);expect(p.objects[0].cleanup.crop.operation).toBe('remove');expect(p.presentation.lighting).toBe('neutral');
   await page.reload();await page.locator('#projectInput').setInputFiles(path);await page.locator('#projectScanInput').setInputFiles(scanFile());await expect(page.locator('#projectStatus')).toContainText('Project opened');
   await expect(page.locator('#scanMode')).toHaveValue('cleaned');await expect(page.locator('#lightingMode')).toHaveValue('neutral');
   const result=await page.evaluate(()=>({triangles:agcDebug.walk.data.triangles.length,geometry:agcDebug.objects[0].triangleCount,height:agcDebug.objects[0].localCollider.size.y}));
@@ -85,7 +85,7 @@ test('save/open preserves cleanup, crop, mode and lighting; reset restores Origi
   expect(await page.evaluate(()=>agcDebug.objects[0].localCollider.size.y)).toBe(2);
   expect(await page.evaluate(()=>agcDebug.walk.data.triangles.length)).toBe(12);
   await expect(page.locator('#gameCount')).toHaveText('1/100');
-  for(const invalid of [{...p.objects[0].cleanup,offset:[0,null,0]},{...p.objects[0].cleanup,algorithm:2},{...p.objects[0].cleanup,mode:'optimized'},{...p.objects[0].cleanup,crop:{operation:'keep',min:[1,1,1],max:[0,0,0]}}]) {
+  for(const invalid of [{...p.objects[0].cleanup,offset:[0,null,0]},{...p.objects[0].cleanup,algorithm:2},{...p.objects[0].cleanup,mode:'invalid'},{...p.objects[0].cleanup,crop:{operation:'keep',min:[1,1,1],max:[0,0,0]}}]) {
     const bad=structuredClone(p);bad.objects[0].cleanup=invalid;expect(()=>parseProject(JSON.stringify(bad))).toThrow('cleanup');
   }
 });

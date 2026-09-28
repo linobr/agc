@@ -103,7 +103,7 @@ test('manual spawn is used and invalid spawn blocks; v2 persists settings and v1
   await spawn(page,-3,.04,-2);
   await expect(page.locator('#spawnStatus')).toContainText('Manual: Spawn valid');
   const saved=await save(page);
-  expect(saved.version).toBe(4);
+  expect(saved.version).toBe(5);
   expect(saved.walk).toMatchObject({slope:35,stepHeight:.3,spawnMode:'manual',spawn:[-3,.04,-2]});
   await page.locator('#walkBtn').click();
   await expect(page.locator('#walkTelemetry')).toContainText('grounded');
@@ -124,7 +124,7 @@ test('manual spawn is used and invalid spawn blocks; v2 persists settings and v1
   const legacy={...saved,version:1}; delete legacy.walk;
   await open(page,legacy);
   const migrated=await save(page);
-  expect(migrated.version).toBe(4); expect(migrated.walk).toMatchObject({slope:40,stepHeight:.2,minArea:.1,spawnMode:'auto'});
+  expect(migrated.version).toBe(5); expect(migrated.walk).toMatchObject({slope:40,stepHeight:.2,minArea:.1,spawnMode:'auto'});
   expect(migrated.objects).toEqual(saved.objects);
   expect(errors).toEqual([]);
 });
@@ -149,7 +149,7 @@ test('v2 rejects malformed walk state instead of losing the current project', as
   const { parseProject }=await import('../src/project.js');
   const base={format:'agc-project',version:1,objects:[],editor:{selectedId:null,tool:'select',collidersVisible:false,camera:{position:[5,4,7],target:[0,1,0],near:.02,far:500}}};
   const migrated=parseProject(JSON.stringify(base));
-  expect(migrated.version).toBe(4);
+  expect(migrated.version).toBe(5);
   for(const invalid of [{stepHeight:-.1},{stepHeight:.5},{slope:70},{spawnMode:'manual',spawn:null},{spawn:[1,2]},{minArea:-1}]) {
     expect(()=>parseProject(JSON.stringify({...migrated,walk:{...migrated.walk,...invalid}}))).toThrow('Invalid AGC project');
   }

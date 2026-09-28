@@ -58,8 +58,8 @@ opening** keeps the current scene. Empty and primitive-only projects open direct
 
 Transforms, object names, primitive colors, body behavior, collider shape and
 visibility, reset transforms, selection, active tool and camera are restored.
-Project v4 stores slope limit, step height, minimum region area, spawn mode/coordinates,
-gameplay definitions/rules and scan cleanup recipes. Versions 1–3 migrate to v4.
+Project v5 stores slope limit, step height, minimum region area, spawn mode/coordinates,
+gameplay definitions/rules and scan cleanup recipes. Versions 1–4 migrate to v5.
 Collected items, completed objectives, enabled overrides, time and win state are
 never saved; opening always restores the authored starting state.
 Export during a physics test saves the edited starting transforms, not a transient
@@ -67,7 +67,7 @@ simulation position. Opening always returns to editor mode. As in the original
 MVP, starting a physics test sets the transform-reset baseline to the edited start.
 
 There is no autosave. Export again after edits; keep both `.agc` and the GLB as
-your backup. See [the v4 format specification (with v1/v2/v3 migration)](AGC_PROJECT_FORMAT.md) for limits,
+your backup. See [the v5 format specification (with v1/v2/v3/v4 migration)](AGC_PROJECT_FORMAT.md) for limits,
 validation and the decision against embedding large scans.
 
 ## Prototype limits
@@ -134,7 +134,7 @@ Hard limits remain **100,000 input triangles**, **500,000 triangle–cell refere
 
 Run the reproducible synthetic-grid benchmark with `node scripts/benchmark-walk.js`. It measures extraction/walkability, region construction and collider indexing separately, plus total analysis including spawn search. Three runs per size, median per phase, no CI timing threshold. The Playwright suite also checks 10k/50k/100k cases for valid results and bounded structures. Benchmark measurements for this increment are recorded in [AGC_PROGRESS.md](AGC_PROGRESS.md).
 
-**Show Walkable**, **Show Collision** and **Show Spawn / Player** toggle the derived overlays. The old **Colliders** button still shows Physics Test bounds. Regions, collision structures, overlays and player state are not serialized; they are rebuilt from the original scan. Project v4 persists walk settings, spawn, gameplay definitions and cleanup, with migration from v1/v2/v3.
+**Show Walkable**, **Show Collision** and **Show Spawn / Player** toggle the derived overlays. The old **Colliders** button still shows Physics Test bounds. Regions, collision structures, overlays and player state are not serialized; they are rebuilt from the original scan. Project v5 persists walk settings, spawn, gameplay definitions and cleanup, with migration from v1/v2/v3/v4.
 
 Known difficult inputs: inverted winding, unsupported animated/instanced meshes, large holes, sub-millimetre noise, steep or rough slopes, thin ledges, vegetation, overlapping/non-manifold geometry, wrong scale and enclosed spaces without headroom. The heuristics deliberately prefer rejecting an uncertain start over claiming a repaired scan.
 
@@ -154,9 +154,9 @@ node scripts/verify-gameplay.js http://127.0.0.1:4189/agc/
 node scripts/verify-gameplay.js https://linobr.github.io/agc/
 ```
 
-It authors a trigger, gated goal and collectible through the inspector, plays through pickup/win, restarts, saves/reopens v4, and returns to an editable scene using only a generated local scan.
+It authors a trigger, gated goal and collectible through the inspector, plays through pickup/win, restarts, saves/reopens v5, and returns to an editable scene using only a generated local scan.
 
-## Reversible scan cleanup (project v4)
+## Reversible scan cleanup (project v5)
 
 Import a GLB locally, then use **SCAN QUALITY** in the inspector. The compact analysis
 shows triangles, meshes, approximate dimensions/bounds, connected components, isolated
@@ -172,41 +172,94 @@ A 1%-diagonal separation margin protects nearby details. Overlapping component b
 are retained conservatively. Missing, invalid or substantially opposing normals are
 recomputed using the source indexing/seams (smooth where vertices are shared, flat where
 unshared). The derived scan is centered horizontally and grounded; its offset is displayed.
-No destructive edit, GLB export, strong decimation or new dependency is involved.
+Auto Clean does not perform destructive edits, GLB export or decimation.
 
 **Crop workflow:** click **Crop Scan**, move the blue box with Center X/Y/Z and resize it
 with Size X/Y/Z. Orbit the viewport to inspect all sides. **Keep Inside** retains only
 triangles whose three vertices are inside; **Remove Inside** removes triangles touching
 the box. This can exclude a table, monitor or border even when connected to the main scan.
-Each application replaces the previous crop, measured against the source coordinates.
-**Reset Crop** removes only the crop. Crops do not cap cut surfaces or split triangles at
+Each application adds another crop step, measured against original scan-root coordinates.
+Up to 32 steps can be combined. Choose the preview operation and **Preview Crop** to inspect
+the prospective retained geometry as a cyan wireframe. This is transient: applying Keep/Remove
+commits a step; Cancel Preview, saving or starting a test restores the applied scene first.
+**Undo Last Step** restores the previous cleanup/optimization/proxy recipe (20 session steps).
+View switches do not consume undo. **Reset Crop** clears all crop steps; Crops do not cap cut surfaces or split triangles at
 box boundaries; coarse meshes may lose large boundary faces. Empty results are rejected.
 
-Switch **Original / Cleaned** at any time to compare triangles, removed automatic
+Switch **Original / Cleaned / Optimized** at any time to compare triangles, removed automatic
 components, bounds and dimensions. **Reset Cleanup** clears the recipe and restores source
 geometry, normals and bounds exactly. Editable transforms remain independent. The original
-GLB is always unchanged and must be retained separately for Save/Open. Project v4 stores
-only the recipe and lighting; v1/v2/v3 load with compatible defaults.
+GLB is always unchanged and must be retained separately for Save/Open. Project v5 stores
+only recipes, optimization/proxy parameters and lighting; v1/v2/v3/v4 migrate.
 
 Studio uses neutral hemisphere, key and fill lighting with sRGB output and ACES tone
 mapping. Neutral reduces directional contrast; Original restores the previous editor light
 rig. Exposure and light/dark backgrounds are saved. Lighting cannot remove baked shadows,
 recover missing textures, repair holes or reversed triangle winding, or turn damaged photogrammetry into a finished asset.
-Automatic visual simplification is intentionally absent: textured scan seams and silhouettes
-cannot be reliably preserved by a simple decimator without an error-controlled pipeline.
+**Optimized** is an optional simplification of Cleaned, generated on demand. A pinned, small
+`meshoptimizer@1.3.0` dependency supplies its standalone WASM simplifier (no runtime network
+resource). The default target is 200k triangles with a 0.1% estimated relative error limit;
+50k/100k/200k presets and a numeric target are available. UVs, normals and vertex colors
+participate in the error metric; material groups and open borders are preserved. Surviving
+vertex attributes are copied, never written back to source. The target may not be reached:
+quality, seams and topology take precedence. This is lossy, not a visual quality guarantee;
+inspect thin details and texture distortion before using a coarser error setting.
+See [Meshoptimizer simplifier documentation](https://github.com/zeux/meshoptimizer/tree/master/js#simplifier).
 
 Geometry switches and cleanup rebuild walk collision triangles, surface regions and spawn
 validation without deleting gameplay objects/rules/goals/collectibles. Physics Test still
 uses its documented box/compound approximations, now based on active compacted geometry;
-it is not a triangle-accurate collider and can bridge empty space. Walk Test uses the actual
-remaining triangles. Dense scans above its existing 100k limit must be cropped to a smaller
-section before walking. Cleanup supports static meshes up to 600k triangles; above that,
+it is not a triangle-accurate collider and can bridge empty space. Walk Test and Walkability
+use a separate **Collision Proxy** when available. The default proxy target is 20k triangles
+with estimated absolute error at most 0.01 scan units. The proxy ignores visual UV/material
+seams, welds only exactly matching positions, and preserves open borders; it does not fill
+holes, prune components or sample away arbitrary triangles. Original mode has its own proxy;
+Cleaned/Optimized share a proxy derived from Cleaned, so visual simplification settings do
+not affect collision. Show Collision Proxy displays it in magenta in the editor. The existing
+Show Collision overlay displays the triangles actually used by Walk Test.
+
+Proxies are used only below 100k triangles and an estimated world-space error of 0.025 units;
+later scale edits can invalidate this guard. Otherwise Walk falls back to visual geometry
+and retains all existing triangle, region, spatial and spawn guards. A proxy can still be
+unusable for walking (dense cells, narrow surfaces, no headroom), even below the triangle
+budget. Lower its target, crop, or author a collision mesh externally. Small scans below the
+proxy target use visual triangles directly. Proxy generation never alters the visual mesh. Cleanup supports static meshes up to 600k triangles; above that,
 counts/bounds remain available but connectivity and cleanup are explicitly disabled.
 Analysis runs at import/open and cleanup on user action, never per frame. Long geometry
 passes yield periodically and report status, though decoding, normals and buffer allocation
-may still briefly block on large files. Cross-mesh connectivity is not inferred.
+may still briefly block on large files. Quality-analysis components remain per mesh; the
+position-only proxy can weld exact coincident positions across meshes. Cached visual variants
+and proxies require additional RAM while preserving the original for reversible comparison.
 
 Local visual verification: `node scripts/verify-scan.js http://127.0.0.1:4189/agc/ /absolute/path/to/scan.glb`
 uses a running production preview and stores ignored screenshots/metrics in `artifacts/scan-verification`.
 The optional private scan is accepted only on localhost; live verification uses generated
 fixtures. Never add private GLBs, screenshots or traces to Git.
+
+
+Optimized/proxy production check (generated scan for live; private file allowed only locally):
+
+```sh
+node scripts/verify-optimized.js http://127.0.0.1:4189/agc/
+node scripts/verify-optimized.js http://127.0.0.1:4189/agc/ /absolute/path/to/scan.glb
+node scripts/verify-optimized.js https://linobr.github.io/agc/
+```
+
+The comparison displays all four triangle counts, active mode, achieved vs requested target,
+estimated errors and generation timings. Cached variants are reused on view switches;
+recipe changes regenerate affected data and revalidate walkability/spawn. Crop preview and
+undo history are intentionally session-only; saved crop steps and optimization/proxy settings
+are rebuilt from the separately retained original GLB when opening a v5 project.
+
+
+Representative local scan check (448,567 triangles): default Optimized produced 199,999
+triangles without a pronounced degradation in the inspected overview/detail screenshots.
+The default proxy produced 19,939 triangles but hit the existing per-cell Walk density guard.
+For this scan, proxy target 5,000 with error 0.02 produced 7,195 triangles (7,101 after Walk's
+duplicate filtering), with valid spawn and grounded Walk Test. This is an explicit coarser
+collision setting, not the default. Its estimated error was 0.01983 scan units; the target
+was intentionally not forced. Neither variant repairs the scan's holes, frayed leaves or
+baked texture defects. Local screenshots/metrics stay in the ignored verification folder.
+
+Visual and collision targets are independent. For unusually low visual targets, lower the
+proxy target too if needed; a strict collision error budget may still retain more triangles.

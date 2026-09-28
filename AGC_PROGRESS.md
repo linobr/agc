@@ -2,7 +2,7 @@
 
 Stand: 2026-09-28. Repo `linobr/agc`.
 
-- Aktueller Entwicklungsstand: reversible Scan-Bereinigung, Crop und Projektformat v4 auf dem bestehenden No-Code-Gameplay (aktueller Abschnitt unten). Gameplay bleibt als `v1.2.0-gameplay` auf `334b36d` gesichert. Walkability bleibt als Release `v1.1.0-walkability` exakt auf `b9af19e` gesichert; der erste Walk-Test als `v1.0.0` auf `6594030`.
+- Aktueller Entwicklungsstand: Optimized-Modus, wiederholbare Crops mit Preview/Undo, getrennte Collision-Proxies und Projektformat v5 auf dem bestehenden No-Code-Gameplay (aktueller Abschnitt unten). Cleanup v4 ist als `v1.3.0-cleanup` auf `6c7f71a` gesichert. Gameplay bleibt als `v1.2.0-gameplay` auf `334b36d` gesichert. Walkability bleibt als Release `v1.1.0-walkability` exakt auf `b9af19e` gesichert; der erste Walk-Test als `v1.0.0` auf `6594030`.
 - Öffentliche App: **https://linobr.github.io/agc/**. GitHub Pages deployt automatisch von `main`; Produktionsprüfskripte prüfen Preview und Live-App mit synthetischen Scans.
 - Git-Strategie: `main` ist der aktuelle funktionierende und geprüfte Source-Stand. Featurebranches nur temporär für konkrete Arbeiten; wichtige stabile Wiederherstellungspunkte zusätzlich mit Tags / GitHub Releases markieren. Secrets, Runtime- und private Nutzerdaten bleiben außerhalb von Git und Releases.
 
@@ -181,3 +181,70 @@ starker visueller Decimation evaluieren.
   Tastatur-Pickup, gesperrtem Ziel, Win/Restart und Editor-Rückkehr ohne JS-/Assetfehler.
 - Cleanup-Browserprüfung ergänzt die synthetischen Tests durch echte GLB-Importwege,
   Auto Clean, Crop, Original-Rückkehr und Beleuchtungsumschaltung.
+
+
+## 2026-09-28 — Optimized, Crop-Schritte, Collision-Proxies und v5
+
+- Vor Beginn stabilen Release `v1.3.0-cleanup` erstellt, exakt auf
+  `6c7f71ab89d5059974472ba0f5e0a26ffb919703`; Tag-Ziel per GitHub API geprüft.
+- Drei Modi: Original, Cleaned und optional Optimized. Cleaned bildet immer die Basis
+  der visuellen Vereinfachung. Ziel 50k/100k/200k oder Zahl; Default 200k bei geschätztem
+  relativen Fehler 0,1%. Ziel darf zugunsten von Qualität/Topologie überschritten werden.
+- Kleiner, gepinnter `meshoptimizer@1.3.0`-Simplifier mit eingebettetem WASM, ohne externe
+  Ressourcen im Browser. UVs, Normalen und Farben in der Fehlermetrik; Materialgruppen und
+  offene Ränder geschützt. Original und Cleaned bleiben separat erhalten. Bundle-Zuwachs
+  gegenüber Cleanup v4: ungefähr 23 KB gzip, keine weiteren transitiven Abhängigkeiten.
+- Bis zu 32 Crop-Schritte: Keep/Remove, echte Vorschau der verbleibenden Geometrie,
+  Cancel, Undo der letzten Rezeptänderung (20 Schritte), Reset Crop und Reset Cleanup.
+  Vorschau verändert weder gespeicherte Einstellungen noch Kollisionsdaten; Save/Test
+  beendet die Vorschau. Undo hält nur Rezepte im RAM, keine Geometriehistorie.
+- Position-only Collision-Proxies separat vom Visual Mesh. Exaktes Positions-Welding,
+  randgeschützte Vereinfachung, keine willkürliche Triangle-Auswahl/Lochfüllung. Default
+  20k, geschätzter Fehler 0,01 Scan-Einheiten; nur bei größerer Ausgangsgeometrie generiert.
+  Original bekommt seinen eigenen Proxy, Cleaned/Optimized teilen die bereinigte Basis.
+- Walkability und Walk Test verwenden passende Proxies. Schutzgrenzen: ≤100k Dreiecke
+  und geschätzter Weltfehler ≤0,025; spätere Skalierung kann den Proxy unpassend machen.
+  Dann Visual-Fallback mit allen bestehenden Limits. UI nennt einen blockierten Walk-Test
+  ausdrücklich. Proxy-Overlay magenta; vorhandenes Walk-Collision-Overlay zeigt tatsächliche
+  Kollisionsdreiecke. Physics Test behält die bestehenden Box-/Compound-Näherungen.
+- v5 speichert nur Modus, Crop-Operationen, Optimierungs-/Proxyparameter und bisherige
+  Einstellungen. v1–v4 migrieren, v4-Crop/Offset bleiben erhalten. Original-GLB weiterhin
+  separat erforderlich; keine privaten GLBs/Screenshots in Git.
+
+### Prüfungen und reale Ergebnisse
+
+- `npm run build` erfolgreich (bekannte Bundlegrößen-Warnung).
+- Vollständige Suite: **46/46** erfolgreich, einschließlich aller bisherigen 41 Tests.
+- Nach Präzisierung des Proxy-Status: Optimierungs-/Proxytests erneut **5/5** erfolgreich.
+- `npm audit --audit-level=moderate`: **0 Schwachstellen**; `git diff --check` sauber.
+- Lokaler Production-Build, vorhandener privater Pflanzenscan, keine Uploads:
+
+| Variante | Dreiecke |
+| --- | ---: |
+| Original | 448.567 |
+| Cleaned (Auto Clean, kein Crop) | 448.567 |
+| Optimized (Ziel 200k, Fehler 0,1%) | 199.999 |
+| Proxy Standard (Ziel 20k, Fehler 0,01) | 19.939 |
+| Proxy angepasst (Ziel 5k, Fehler 0,02) | 7.195 |
+
+- Optimized reduziert Renderdreiecke um etwa **55,4%**; keine deutliche optische
+  Verschlechterung in geprüfter Gesamt- und näherer Ansicht. Kleine Schattierungs-/Detailschwankungen
+  möglich. Bereits vorhandene Löcher, ausgefranste Blätter und Texturfehler bleiben sichtbar.
+- Standardproxy: unter Gesamtbudget, aber lokale Dreieckdichte überschreitet den bestehenden
+  Zellschutz. Angepasster Proxy: etwa **98,4%** weniger Geometrie; geschätzter Fehler 0,01983.
+  7.101 Walk-Kollisionstriangle nach 94 Duplikaten, 531 Kandidaten; gültiger Spawn,
+  Grounding, Respawn und Rückkehr zum Editor im realen Production-Walk-Test geprüft.
+- Letzter lokaler Lauf: Optimierung ca. 1,17 s, Proxy-Erstellung ca. 1,78 s; gemessene
+  Walk-Teilphasen 44,1 ms Analyse + 39,4 ms Regionen + 8,1 ms Collider. Keine FPS-Garantie:
+  Texturen, Overdraw, Hardware und zusätzliche gespeicherte Varianten beeinflussen RAM/Renderzeit.
+- Lokale Belege: `artifacts/scan-verification/real-v5-*.png` und JSON-Messwerte, Git-ignoriert.
+  Die Software-GPU-Prüfung drosselt nur im Prüfbrowser die Renderfrequenz.
+
+Bekannte Grenzen: Fehlermetriken sind Näherungen, Zielzahlen nicht garantiert. Topologie,
+UV-Nähte und Randartefakte können Vereinfachung begrenzen. Proxies ersetzen keine manuell
+geprüfte Gameplay-Kollision; alle Spawn-/Region-/Dichtegrenzen bleiben bestehen. Analyse
+und Ableitungen bleiben auf unterstützte statische Scans bis 600k Dreiecke begrenzt.
+
+- Abschließende lokale Production-Smokes: Optimized/Proxy-Walk, Crop-Preview/Undo und v5
+  Save/Open sowie bisheriger Walk-/Stufentest und kompletter Gameplay-Flow erfolgreich,
+  ohne JS-/Assetfehler. Veröffentlichte App wird nach dem Push mit generierten Scans geprüft.

@@ -1,3 +1,4 @@
+import { collisionRootFor } from './scan-optimize.js';
 import * as THREE from 'three';
 import { buildRegions } from './walk-regions.js';
 
@@ -17,13 +18,14 @@ export function analyzeWalk(entries, { slope = 40, minArea = 0.1, stepHeight = 0
   const started = performance.now(), triangles = [], unique = new Map();
   const slopeCos = Math.cos(slope*Math.PI/180);
   let count = 0, duplicates = 0;
-  for (const entry of entries) entry.root.traverse(o => {
+  for (const entry of entries) collisionRootFor(entry).traverse(o => {
     if (o.isMesh) count += (o.geometry.index?.count ?? o.geometry.attributes.position?.count ?? 0)/3;
   });
   if (count > LIMITS.triangles) throw new Error('Walk limit: 100,000 triangles. Use a smaller scan section; original GLB is unchanged.');
   for (const entry of entries) {
-    entry.root.updateMatrixWorld(true);
-    entry.root.traverse(o => {
+    const collisionRoot=collisionRootFor(entry);
+    collisionRoot.updateMatrixWorld(true);
+    collisionRoot.traverse(o => {
       if (!o.isMesh || !o.geometry.attributes.position) return;
       if (o.isSkinnedMesh || o.isInstancedMesh || o.morphTargetInfluences?.some(Boolean))
         throw new Error('Walk supports static, non-instanced meshes only.');

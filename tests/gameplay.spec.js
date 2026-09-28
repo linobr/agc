@@ -79,7 +79,7 @@ test('no-code editor builds a game: enter message, collectible, locked goal, res
   await page.locator('#addCollectible').click();await editPosition(page,[-4,.7,-3]);
   await page.locator('#gameAddRule').click();await page.getByLabel('Rule 1 action',{exact:true}).selectOption('completeObjective');
   await page.getByLabel('Rule 1 objective',{exact:true}).fill('Find the token');await page.getByLabel('Rule 1 objective',{exact:true}).press('Tab');
-  const saved=await save(page);expect(saved.version).toBe(4);expect(saved.gameplay).toHaveLength(3);
+  const saved=await save(page);expect(saved.version).toBe(5);expect(saved.gameplay).toHaveLength(3);
   await page.locator('#gameBtn').click();await expect(page.locator('#sceneStatus')).toHaveText('GAME TEST');
   await expect(page.locator('#gameHudCount')).toHaveText('Collectibles: 0 / 1');
   await expect(page.locator('#gameMessage')).toContainText('Collect all items');await expect(page.locator('#gameWin')).toBeHidden();
@@ -115,7 +115,7 @@ test('v3 roundtrip, v1/v2 migrations and invalid gameplay leave the scene intact
   expect((await save(page)).gameplay).toEqual(saved.gameplay);
   for(const version of [1,2]) {
     const old={...saved,version};delete old.gameplay;if(version===1)delete old.walk;
-    expect(parseProject(JSON.stringify(old)).version).toBe(4);
+    expect(parseProject(JSON.stringify(old)).version).toBe(5);
     await open(page,old);await page.locator('#projectScanInput').setInputFiles(roomFile());await expect(page.locator('#projectStatus')).toContainText('Project opened');
     await expect(page.locator('#gameCount')).toHaveText('0/100');
     expect((await save(page)).objects).toEqual(saved.objects);

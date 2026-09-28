@@ -1153,3 +1153,8 @@ button {
 .crop-fields input { width: 100%; min-width: 0; }
 .lighting-section label { display: flex; justify-content: space-between; margin: 9px 0; }
 .lighting-section input { width: 90px; }
+
+#scanPanel [aria-pressed="true"] { background: #d2eade; border-color: #438d6d; }
+#scanPanel details { margin: 12px 0; }
+#scanPanel details label { display: block; margin: 8px 0; font-size: 11px; }
+#scanPanel details input[type=number] { width: 96px; }

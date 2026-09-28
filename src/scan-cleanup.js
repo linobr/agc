@@ -1,16 +1,22 @@
 import * as THREE from 'three';
 
 // Algorithm version is part of the project format: never silently change saved recipes.
-export const DEFAULT_CLEANUP = { algorithm: 1, mode: 'original', auto: false, crop: null, offset: [0,0,0] };
+export const DEFAULT_CLEANUP = { algorithm: 1, mode: 'original', auto: false, crop: null, crops: [], offset: [0,0,0], optimization: { target:200000, error:0.001 }, proxy: { enabled:true, target:20000, error:0.01 } };
 export const DEFAULT_PRESENTATION = { lighting: 'studio', exposure: 1.05, background: 'light' };
 export const SCAN_LIMIT = 600000;
 const pause = () => new Promise(resolve => setTimeout(resolve, 0));
 export function validateCleanup(c) {
   const vec = a => Array.isArray(a) && a.length === 3 && a.every(n => typeof n === 'number' && Number.isFinite(n) && Math.abs(n) <= 1e6);
-  if (!c || c.algorithm !== 1 || !['original','cleaned'].includes(c.mode) || typeof c.auto !== 'boolean' || !vec(c.offset) ||
+  if (!c || c.algorithm !== 1 || !['original','cleaned','optimized'].includes(c.mode) || typeof c.auto !== 'boolean' || !vec(c.offset) ||
       (c.crop !== null && (!c.crop || !['keep','remove'].includes(c.crop.operation) || !vec(c.crop.min) || !vec(c.crop.max) || !c.crop.max.every((n,i) => n > c.crop.min[i]))))
     throw new Error('Invalid AGC project: cleanup settings.');
-  return { algorithm:c.algorithm, mode:c.mode, auto:c.auto, offset:[...c.offset], crop:c.crop && { operation:c.crop.operation, min:[...c.crop.min], max:[...c.crop.max] } };
+  if (!Array.isArray(c.crops) || c.crops.length>31 || c.crops.some(b => !b || !['keep','remove'].includes(b.operation) || !vec(b.min) || !vec(b.max) || !b.max.every((n,i)=>n>b.min[i])) ||
+      !c.optimization || !Number.isInteger(c.optimization.target) || c.optimization.target<100 || c.optimization.target>600000 || !Number.isFinite(c.optimization.error) || c.optimization.error<0.0001 || c.optimization.error>0.005 ||
+      !c.proxy || typeof c.proxy.enabled!=='boolean' || !Number.isInteger(c.proxy.target) || c.proxy.target<100 || c.proxy.target>50000 || !Number.isFinite(c.proxy.error) || c.proxy.error<0.001 || c.proxy.error>0.02)
+    throw new Error('Invalid AGC project: optimization, proxy or crop history settings.');
+  const box=b=>({operation:b.operation,min:[...b.min],max:[...b.max]});
+  return { algorithm:c.algorithm, mode:c.mode, auto:c.auto, offset:[...c.offset], crop:c.crop && box(c.crop), crops:c.crops.map(box),
+    optimization:{target:c.optimization.target,error:c.optimization.error}, proxy:{enabled:c.proxy.enabled,target:c.proxy.target,error:c.proxy.error} };
 }
 export function validatePresentation(p) {
   if (!p || !['studio','neutral','original'].includes(p.lighting) || !['light','dark'].includes(p.background) ||
@@ -153,7 +159,7 @@ export async function deriveScan(analysis, config, progress = () => {}) {
   validateCleanup(config);
   if (analysis.limited) throw new Error(`Cleanup limit: ${SCAN_LIMIT.toLocaleString()} triangles; static non-instanced meshes only. Original remains available.`);
   const geometries = [], bounds = new THREE.Box3(), v = new THREE.Vector3();
-  const crop = config.crop && new THREE.Box3(new THREE.Vector3().fromArray(config.crop.min),new THREE.Vector3().fromArray(config.crop.max));
+  const crops = [config.crop,...config.crops].filter(Boolean).map(c => ({operation:c.operation, box:new THREE.Box3(new THREE.Vector3().fromArray(c.min),new THREE.Vector3().fromArray(c.max))}));
   let triangles=0;
   const retainedComponents=new Set();
   try {
@@ -161,14 +167,17 @@ export async function deriveScan(analysis, config, progress = () => {}) {
       progress(`Building derived geometry · ${i+1}/${analysis.records.length} meshes`); await pause();
       const keep = t => {
         if (config.auto && analysis.components[record.labels[t]]?.remove) return false;
-        if (!crop) return true;
-        let inside=0;
-        for(let j=0;j<3;j++) if (crop.containsPoint(vertex(record.geometry,t*3+j,v).applyMatrix4(record.matrix))) inside++;
-        // Keep requires all vertices inside; Remove removes triangles touching the volume.
-        if (config.crop.operation==='keep') return inside===3;
-        if (inside) return false;
-        const points=[0,1,2].map(j=>vertex(record.geometry,t*3+j,new THREE.Vector3()).applyMatrix4(record.matrix));
-        return !crop.intersectsTriangle(new THREE.Triangle(...points));
+        for(const {operation,box} of crops) {
+          let inside=0;
+          for(let j=0;j<3;j++) if (box.containsPoint(vertex(record.geometry,t*3+j,v).applyMatrix4(record.matrix))) inside++;
+          if(operation==='keep') {if(inside!==3) return false;}
+          else {
+            if(inside) return false;
+            const points=[0,1,2].map(j=>vertex(record.geometry,t*3+j,new THREE.Vector3()).applyMatrix4(record.matrix));
+            if(box.intersectsTriangle(new THREE.Triangle(...points))) return false;
+          }
+        }
+        return true;
       };
       const geometry = await filteredGeometry(record,t => {
         const retained=keep(t);
@@ -182,8 +191,8 @@ export async function deriveScan(analysis, config, progress = () => {}) {
     return { geometries, triangles, bounds:boundsJSON(bounds), removedComponents:analysis.components.length-retainedComponents.size };
   } catch(error) { geometries.forEach(g=>g.dispose()); throw error; }
 }
-export function activateScan(analysis, derived, mode) {
-  analysis.records.forEach((r,i) => { r.mesh.geometry=mode==='cleaned' && derived ? derived.geometries[i] : r.geometry; });
+export function activateScan(analysis, derived, mode, optimized = null) {
+  analysis.records.forEach((r,i) => { r.mesh.geometry=mode==='optimized' && optimized ? optimized.geometries[i] : mode!=='original' && derived ? derived.geometries[i] : r.geometry; });
 }
 export function groundOffset(root, derivedBounds) {
   root.updateMatrixWorld(true);

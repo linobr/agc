@@ -1,3 +1,4 @@
+import { proxyForEntry } from './scan-optimize.js';
 import { ScanEditor, prepareScan, disposeScan } from './scan-editor.js';
 import { DEFAULT_PRESENTATION, validatePresentation } from './scan-cleanup.js';
 import * as THREE from "three";
@@ -115,13 +116,14 @@ const gameplayEditor = new GameplayEditor(scene, {
 });
 const scanEditor = new ScanEditor(scene, {
   entry: () => objects.find(e=>e.kind==='model'),
+  walkState: () => ({ready:!!walkData, reason:$('walkStatus').textContent}),
   busy: () => testMode || !!walkPlayer || !$("loadingOverlay").hidden || !!pendingProject,
   loading: showLoading,
   progress: message => { $("loadProgress").textContent=message; },
   loaded: () => { $("loadingOverlay").hidden=true; },
   changed: entry => {
     disposeWalk();
-    entry.triangleCount=entry.scan.cleanup.mode==='cleaned' ? (entry.scan.derived?.triangles ?? entry.scan.analysis.triangles) : entry.scan.analysis.triangles;
+    entry.triangleCount=entry.scan.cleanup.mode==='original' ? entry.scan.analysis.triangles : entry.scan.cleanup.mode==='optimized' ? entry.scan.optimized.triangles : (entry.scan.derived?.triangles ?? entry.scan.analysis.triangles);
     refreshCollider(entry); syncInspector(); rebuildWalk(); updateStats(); focus(entry);
     return walkData ? "Collider bounds and walkability rebuilt; spawn revalidated." : `Collider bounds rebuilt. Walkability unavailable: ${$("walkStatus").textContent}`;
   },
@@ -271,6 +273,7 @@ function addEntry(root, name, kind = "model") {
   return entry;
 }
 function removeEntry(entry) {
+  scanEditor.cancelPreview();
   disposeWalk();
   if (!entry) return;
   if (entry.body) world.removeBody(entry.body);
@@ -344,6 +347,7 @@ async function decodeGLB(bytes) {
   return gltf.scene;
 }
 async function importFile(file) {
+  scanEditor.cancelPreview();
   if (!file || !$("loadingOverlay").hidden) return;
   if (!file.name.toLowerCase().endsWith(".glb")) {
     notify("Unsupported file. Choose a binary .glb model.");
@@ -398,13 +402,14 @@ function addPrimitive() {
   notify("Test box added. Select Physics to try it.");
 }
 function saveProject() {
+  scanEditor.cancelPreview();
   if (!$("loadingOverlay").hidden || pendingProject) {
     projectMessage("Finish or cancel opening the current file before saving.");
     return;
   }
   try {
     const project = {
-      format: "agc-project", version: 4,
+      format: "agc-project", version: 5,
       presentation: { ...presentation },
       gameplay: structuredClone(gameplayEditor.definitions),
       walk: { ...walkSettings },
@@ -434,6 +439,7 @@ function saveProject() {
   } catch (error) { projectMessage(`Could not save project: ${error.message}`); }
 }
 async function openProject(file) {
+  scanEditor.cancelPreview();
   if (!file || !$("loadingOverlay").hidden) return;
   const token = ++loadToken;
   clearPendingProject();
@@ -768,6 +774,8 @@ function makeBody(entry) {
   return body;
 }
 function startTest() {
+  if (!$("loadingOverlay").hidden) return;
+  scanEditor.cancelPreview();
   setSpawnMode(false);
   if (walkPlayer) stopWalk();
   if (testMode) return;
@@ -948,6 +956,7 @@ function invalidateWalk() {
   if (walkData && !walkPlayer && signature() !== walkSignature) {
     disposeWalk();
     $("walkStatus").textContent = 'Scene changed. Recalculate walk surfaces before Walk Test.';
+    scanEditor.updateProxyStatus();
   }
 }
 function rebuildWalk() {
@@ -970,12 +979,13 @@ function rebuildWalk() {
     const marker = new THREE.Mesh(new THREE.SphereGeometry(0.15,12,8), new THREE.MeshBasicMaterial({color:0x3377ff}));
     marker.name = 'spawn'; walkHelpers.add(marker);
     updateSpawn();
-    $('walkStatus').textContent = `${walkData.candidates.length} walkable candidates · ${walkData.area.toFixed(1)} m² · ${walkData.triangles.length} collision triangles. ${walkData.autoSpawn ? 'Spawn found. Heuristic only.' : 'No safe spawn found. Align/scale scan or adjust thresholds and recalculate.'} ${walkData.duplicates} duplicates removed; ${walkData.filteredRegions} small regions filtered.`;
+    $('walkStatus').textContent = `${objects.some(e=>proxyForEntry(e)) ? "Collision Proxy · " : ""}${walkData.candidates.length} walkable candidates · ${walkData.area.toFixed(1)} m² · ${walkData.triangles.length} collision triangles. ${walkData.autoSpawn ? 'Spawn found. Heuristic only.' : 'No safe spawn found. Align/scale scan or adjust thresholds and recalculate.'} ${walkData.duplicates} duplicates removed; ${walkData.filteredRegions} small regions filtered.`;
     const timing = walkData.timings;
     $('walkTiming').textContent = `Analysis ${timing.walkabilityMs.toFixed(1)} ms · Regions ${timing.regionMs.toFixed(1)} ms · Collider ${timing.colliderMs.toFixed(1)} ms`;
     showWalkHelpers();
+    scanEditor.updateProxyStatus();
     return !!walkData.spawn;
-  } catch (error) { disposeWalk(); $("walkStatus").textContent = error.message; return false; }
+  } catch (error) { disposeWalk(); $("walkStatus").textContent = error.message; scanEditor.updateProxyStatus(); return false; }
 }
 function setSpawnMode(enabled) {
   spawnMode = enabled;
@@ -1021,6 +1031,7 @@ function showWalkHelpers() {
   for (const o of walkHelpers.children) o.visible = $(o.name === 'surfaces' ? 'walkSurfaces' : o.name === 'colliders' ? 'walkColliders' : 'walkMarkers').checked && (o.name !== 'spawn' || !!walkSettings.spawn);
 }
 function startWalk(withGame = false) {
+  scanEditor.cancelPreview();
   if (!$("loadingOverlay").hidden || pendingProject) return;
   resetTest();
   invalidateWalk();

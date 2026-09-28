@@ -41,7 +41,7 @@ test("export and reopen a complete editor scene with scan, transforms, colliders
   await page.locator('[data-tool="rotate"]').click();
   const saved = await exportProject(page);
   expect(saved.format).toBe("agc-project");
-  expect(saved.version).toBe(4);
+  expect(saved.version).toBe(5);
   expect(saved.objects).toHaveLength(2);
   expect(saved.objects[0].source).toEqual({ fileName: "generated-scan.glb", byteLength: scanFile().buffer.length, sha256: expect.stringMatching(/^[a-f0-9]{64}$/) });
   expect(JSON.stringify(saved)).not.toMatch(/(?:\/home\/|C:\\|blob:|data:)/);

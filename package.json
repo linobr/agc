@@ -22,6 +22,7 @@
   "homepage": "https://linobr.github.io/agc/",
   "dependencies": {
     "cannon-es": "0.20.0",
+    "meshoptimizer": "1.3.0",
     "three": "0.180.0"
   },
   "devDependencies": {
