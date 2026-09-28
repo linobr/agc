@@ -151,3 +151,6 @@ blob-report/
 *.log
 *.db
 .env
+
+# Private local visual verification
+artifacts/scan-verification/

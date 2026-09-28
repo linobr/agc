@@ -36,7 +36,7 @@ try {
   await page.locator('#gameExit').click();assert.equal(await page.locator('#sceneStatus').textContent(),'EDITOR MODE');
   const download=page.waitForEvent('download');await page.locator('#exportBtn').click();await (await download).saveAs('test-results/production-game.agc');
   const saved=JSON.parse(await readFile('test-results/production-game.agc','utf8'));
-  assert.equal(saved.version,3);assert.equal(saved.gameplay.length,3);assert.equal(saved.gameplay[1].requireAll,true);
+  assert.equal(saved.version,4);assert.equal(saved.gameplay.length,3);assert.equal(saved.gameplay[1].requireAll,true);
   assert.equal(saved.gameplay.some(o=>'collected' in o),false);
   await page.reload();await page.locator('#projectInput').setInputFiles({name:'production-game.agc',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(saved))});
   await page.locator('#projectScanInput').setInputFiles(roomFile());
@@ -46,5 +46,5 @@ try {
   await page.locator('#gameExit').click();
   await page.locator('#gameObjectSelect').selectOption(saved.gameplay[2].id);await fill('game-size-x',.8);
   assert.deepEqual(errors,[]);
-  console.log(JSON.stringify({url,http:response.status(),errors,game:'UI rules, blocked goal, keyboard pickup/win, objective, restart, v3 save/open and editor verified'}));
+  console.log(JSON.stringify({url,http:response.status(),errors,game:'UI rules, blocked goal, keyboard pickup/win, objective, restart, v4 save/open and editor verified'}));
 } finally { await browser.close(); }

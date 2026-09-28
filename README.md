@@ -58,8 +58,8 @@ opening** keeps the current scene. Empty and primitive-only projects open direct
 
 Transforms, object names, primitive colors, body behavior, collider shape and
 visibility, reset transforms, selection, active tool and camera are restored.
-Project v3 stores slope limit, step height, minimum region area, spawn mode/coordinates
-and gameplay definitions/rules. Version-1 and version-2 projects migrate to v3.
+Project v4 stores slope limit, step height, minimum region area, spawn mode/coordinates,
+gameplay definitions/rules and scan cleanup recipes. Versions 1–3 migrate to v4.
 Collected items, completed objectives, enabled overrides, time and win state are
 never saved; opening always restores the authored starting state.
 Export during a physics test saves the edited starting transforms, not a transient
@@ -67,7 +67,7 @@ simulation position. Opening always returns to editor mode. As in the original
 MVP, starting a physics test sets the transform-reset baseline to the edited start.
 
 There is no autosave. Export again after edits; keep both `.agc` and the GLB as
-your backup. See [the v3 format specification (with v1/v2 migration)](AGC_PROJECT_FORMAT.md) for limits,
+your backup. See [the v4 format specification (with v1/v2/v3 migration)](AGC_PROJECT_FORMAT.md) for limits,
 validation and the decision against embedding large scans.
 
 ## Prototype limits
@@ -134,7 +134,7 @@ Hard limits remain **100,000 input triangles**, **500,000 triangle–cell refere
 
 Run the reproducible synthetic-grid benchmark with `node scripts/benchmark-walk.js`. It measures extraction/walkability, region construction and collider indexing separately, plus total analysis including spawn search. Three runs per size, median per phase, no CI timing threshold. The Playwright suite also checks 10k/50k/100k cases for valid results and bounded structures. Benchmark measurements for this increment are recorded in [AGC_PROGRESS.md](AGC_PROGRESS.md).
 
-**Show Walkable**, **Show Collision** and **Show Spawn / Player** toggle the derived overlays. The old **Colliders** button still shows Physics Test bounds. Regions, collision structures, overlays and player state are not serialized; they are rebuilt from the original scan. Project v3 persists walk settings, spawn and gameplay definitions, with migration from v1/v2.
+**Show Walkable**, **Show Collision** and **Show Spawn / Player** toggle the derived overlays. The old **Colliders** button still shows Physics Test bounds. Regions, collision structures, overlays and player state are not serialized; they are rebuilt from the original scan. Project v4 persists walk settings, spawn, gameplay definitions and cleanup, with migration from v1/v2/v3.
 
 Known difficult inputs: inverted winding, unsupported animated/instanced meshes, large holes, sub-millimetre noise, steep or rough slopes, thin ledges, vegetation, overlapping/non-manifold geometry, wrong scale and enclosed spaces without headroom. The heuristics deliberately prefer rejecting an uncertain start over claiming a repaired scan.
 
@@ -154,4 +154,59 @@ node scripts/verify-gameplay.js http://127.0.0.1:4189/agc/
 node scripts/verify-gameplay.js https://linobr.github.io/agc/
 ```
 
-It authors a trigger, gated goal and collectible through the inspector, plays through pickup/win, restarts, saves/reopens v3, and returns to an editable scene using only a generated local scan.
+It authors a trigger, gated goal and collectible through the inspector, plays through pickup/win, restarts, saves/reopens v4, and returns to an editable scene using only a generated local scan.
+
+## Reversible scan cleanup (project v4)
+
+Import a GLB locally, then use **SCAN QUALITY** in the inspector. The compact analysis
+shows triangles, meshes, approximate dimensions/bounds, connected components, isolated
+small parts and normal issues. **Good / Needs cleanup / Poor scan quality** are geometry
+heuristics, not a visual quality certificate: holes, textures, recognizable objects and
+all forms of frayed edges cannot be evaluated automatically. Coordinates assume metres.
+
+**Auto Clean Scan** derives a separate geometry copy. It welds exact positions for component
+analysis within each mesh (including UV/normal seams), preserves the largest surface-area
+component, removes only separated parts below 0.5% of its area and 10% of its diagonal,
+and removes distant fragments beyond three main diagonals if below 2% of the main area.
+A 1%-diagonal separation margin protects nearby details. Overlapping component bounds
+are retained conservatively. Missing, invalid or substantially opposing normals are
+recomputed using the source indexing/seams (smooth where vertices are shared, flat where
+unshared). The derived scan is centered horizontally and grounded; its offset is displayed.
+No destructive edit, GLB export, strong decimation or new dependency is involved.
+
+**Crop workflow:** click **Crop Scan**, move the blue box with Center X/Y/Z and resize it
+with Size X/Y/Z. Orbit the viewport to inspect all sides. **Keep Inside** retains only
+triangles whose three vertices are inside; **Remove Inside** removes triangles touching
+the box. This can exclude a table, monitor or border even when connected to the main scan.
+Each application replaces the previous crop, measured against the source coordinates.
+**Reset Crop** removes only the crop. Crops do not cap cut surfaces or split triangles at
+box boundaries; coarse meshes may lose large boundary faces. Empty results are rejected.
+
+Switch **Original / Cleaned** at any time to compare triangles, removed automatic
+components, bounds and dimensions. **Reset Cleanup** clears the recipe and restores source
+geometry, normals and bounds exactly. Editable transforms remain independent. The original
+GLB is always unchanged and must be retained separately for Save/Open. Project v4 stores
+only the recipe and lighting; v1/v2/v3 load with compatible defaults.
+
+Studio uses neutral hemisphere, key and fill lighting with sRGB output and ACES tone
+mapping. Neutral reduces directional contrast; Original restores the previous editor light
+rig. Exposure and light/dark backgrounds are saved. Lighting cannot remove baked shadows,
+recover missing textures, repair holes or reversed triangle winding, or turn damaged photogrammetry into a finished asset.
+Automatic visual simplification is intentionally absent: textured scan seams and silhouettes
+cannot be reliably preserved by a simple decimator without an error-controlled pipeline.
+
+Geometry switches and cleanup rebuild walk collision triangles, surface regions and spawn
+validation without deleting gameplay objects/rules/goals/collectibles. Physics Test still
+uses its documented box/compound approximations, now based on active compacted geometry;
+it is not a triangle-accurate collider and can bridge empty space. Walk Test uses the actual
+remaining triangles. Dense scans above its existing 100k limit must be cropped to a smaller
+section before walking. Cleanup supports static meshes up to 600k triangles; above that,
+counts/bounds remain available but connectivity and cleanup are explicitly disabled.
+Analysis runs at import/open and cleanup on user action, never per frame. Long geometry
+passes yield periodically and report status, though decoding, normals and buffer allocation
+may still briefly block on large files. Cross-mesh connectivity is not inferred.
+
+Local visual verification: `node scripts/verify-scan.js http://127.0.0.1:4189/agc/ /absolute/path/to/scan.glb`
+uses a running production preview and stores ignored screenshots/metrics in `artifacts/scan-verification`.
+The optional private scan is accepted only on localhost; live verification uses generated
+fixtures. Never add private GLBs, screenshots or traces to Git.

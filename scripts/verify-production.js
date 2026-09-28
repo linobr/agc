@@ -44,7 +44,7 @@ try {
   const downloading=page.waitForEvent('download'); await page.locator('#exportBtn').click();
   await (await downloading).saveAs('test-results/production-walk.agc');
   const saved=JSON.parse(await readFile('test-results/production-walk.agc','utf8'));
-  assert.equal(saved.version,3); assert.equal(saved.walk.slope,35); assert.equal(saved.walk.stepHeight,.25);
+  assert.equal(saved.version,4); assert.equal(saved.walk.slope,35); assert.equal(saved.walk.stepHeight,.25);
   assert.deepEqual(saved.walk.spawn,[-3,.04,-2]);
   await page.locator('#projectInput').setInputFiles({name:'production-walk.agc',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(saved))});
   await page.locator('#projectScanInput').setInputFiles(roomFile());
@@ -64,5 +64,5 @@ try {
   await page.screenshot({path:'test-results/production-step.png'});
   await page.locator('#walkBtn').click();
   assert.deepEqual(failures,[]);
-  console.log(JSON.stringify({url,http:response.status(),assetErrors:failures,walk:'regions, manual/invalid spawn, movement, respawn, project v3 roundtrip, low step and editor verified'}));
+  console.log(JSON.stringify({url,http:response.status(),assetErrors:failures,walk:'regions, manual/invalid spawn, movement, respawn, project v4 roundtrip, low step and editor verified'}));
 } finally { await browser.close(); }

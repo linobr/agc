@@ -2,8 +2,8 @@
 
 Stand: 2026-09-28. Repo `linobr/agc`.
 
-- Aktueller Entwicklungsstand: No-Code-Gameplay mit Triggern, Collectibles, Zielen und Projektformat v3 (aktueller Abschnitt unten). Walkability bleibt als Release `v1.1.0-walkability` exakt auf `b9af19e` gesichert; der erste Walk-Test als `v1.0.0` auf `6594030`.
-- Öffentliche App: **https://linobr.github.io/agc/**. Das Pages-Deployment mit `67e84f6` wurde erfolgreich getestet.
+- Aktueller Entwicklungsstand: reversible Scan-Bereinigung, Crop und Projektformat v4 auf dem bestehenden No-Code-Gameplay (aktueller Abschnitt unten). Gameplay bleibt als `v1.2.0-gameplay` auf `334b36d` gesichert. Walkability bleibt als Release `v1.1.0-walkability` exakt auf `b9af19e` gesichert; der erste Walk-Test als `v1.0.0` auf `6594030`.
+- Öffentliche App: **https://linobr.github.io/agc/**. GitHub Pages deployt automatisch von `main`; Produktionsprüfskripte prüfen Preview und Live-App mit synthetischen Scans.
 - Git-Strategie: `main` ist der aktuelle funktionierende und geprüfte Source-Stand. Featurebranches nur temporär für konkrete Arbeiten; wichtige stabile Wiederherstellungspunkte zusätzlich mit Tags / GitHub Releases markieren. Secrets, Runtime- und private Nutzerdaten bleiben außerhalb von Git und Releases.
 
 ## Projekte speichern und wieder öffnen
@@ -120,3 +120,64 @@ Neue Prüfungen verwenden ausschließlich generierte Geometrie und Inspector-Ein
 Produktionsbuild lokal geprüft: Walk- und Gameplay-Smoke erfolgreich, HTTP 200 und keine JS/CSS-Fehler. Gameplay-Smoke durchläuft den Spielablauf mit echten WASD-Eingaben; Win-Overlay visuell geprüft. Build ca. 751 kB JS / 197 kB gzip (bekannte Chunkwarnung), Audit ohne Schwachstellen, Diff-Prüfung sauber. Der bestehende Spawn-Klicktest wurde nach einem Timingfehler stabilisiert: Bildschirmprojektion erst nach Auswahl des Spawn-Modus und mit aktualisierter Kamera-Weltmatrix. Der unveränderte Klick-/Spawn-Funktionsumfang wurde dreimal hintereinander erfolgreich geprüft; keine zusätzliche Wartezeit oder gelockerte Assertion nötig.
 
 Finaler Gesamtlauf: **28/28 Tests bestanden** (ca. 1,9 Minuten), einschließlich aller bisherigen 21 Szenarien. Neue Abdeckung: Enter/Leave und feste Actions, nicht rekursive Aktivierung, Collectible/Goal-Gating, Zeit-Freeze/Restart/Respawn, HUD und Win-Overlay, Editor-Rückkehr, v3-Roundtrip, v1/v2-Migration, Ablehnung unbekannter Actions/Codefelder/Referenzen/Übergrößen, Größenbearbeitung und Löschbereinigung. Beide lokalen Produktions-Smokes (Walk und Gameplay) sind erfolgreich. Es wurden keine privaten Scans oder Projekte für Tests/Commits verwendet.
+
+## 2026-09-28 — Reversible Scan-Bereinigung und Projekt v4
+
+- Gameplay-Backup vor jeder Cleanup-Änderung: Release `v1.2.0-gameplay`, exakt
+  `334b36dc2e7d5ee553586f1110dbc6079c719f31`; Tag-Ziel über GitHub API geprüft.
+- Scananalyse: Dreiecke, Meshes, Bounds/Dimensionen, Komponenten innerhalb eines Meshes
+  (exakte Positionsverbindungen über UV-/Normalennähte), kleine getrennte Inseln,
+  fehlende/ungültige/gegenläufige Normalen und grob aufgeblähte Bounds. Status ausdrücklich heuristisch.
+- Auto Clean arbeitet auf eigenen BufferGeometries. Konservative relative Flächen-/Abstandsgrenzen
+  erhalten die Hauptkomponente; fehlerhafte Normalen werden geometrisch neu berechnet.
+  Zentrieren und Grounding erfolgen als angezeigter, gespeicherter Offset der Ableitung.
+- Crop Scan: sichtbare blaue Box, Center/Size für X/Y/Z, Keep Inside, Remove Inside und
+  Reset Crop. Kein Triangle-Picking nötig. Jede Anwendung ersetzt den vorigen Crop.
+  Abgeschnittene Dreiecke werden nicht gekappt; ein vollständig leerer Crop wird abgelehnt.
+- Original/Cleaned-Vergleich und Reset Cleanup; Originalattribute, Materialien und GLB-Datei bleiben erhalten.
+  Eigene Objekttransformationen bleiben unabhängig vom Cleanup-Reset.
+- Studio/Neutral/Original, Exposure und heller/dunkler Hintergrund. sRGB und ACES bleiben aktiv.
+- Projekt v4 speichert Rezept und Präsentation, keine Meshdaten. v1/v2/v3 migrieren.
+  Opening bereitet Analyse/Ableitung vor, bevor die bestehende Szene ersetzt wird.
+- Walkability und Spawn werden nach jeder Geometrieumschaltung neu geprüft. Gameplay bleibt erhalten.
+  Walk-Kollisionen verwenden verbleibende Dreiecke; Physics Test bleibt eine Bounds-Näherung
+  mit Box/Compound und kann daher weiterhin leeren Raum innerhalb der Bounds überbrücken.
+- Grenze: 600k Dreiecke für detaillierte Analyse/Cleanup, statische nicht-instanzierte Meshes;
+  das bestehende Walk-Limit bleibt 100k. Fortschritt mit regelmäßigen Yield-Punkten,
+  pausiertes 3D-Rendering während Verarbeitung; keine Geometrieanalyse pro Frame.
+- Keine Simplification: sichere Erhaltung texturierter Scan-Silhouetten/UV-Nähte erfordert
+  mehr als den verfügbaren einfachen Decimator. Keine neue Abhängigkeit.
+
+### Reale lokale Sichtprüfung
+
+Ein vorhandener privater Pflanzenscan außerhalb des Repositories wurde ausschließlich auf
+localhost im Produktionsbuild geöffnet. Kein Scan und kein Screenshot wird eingecheckt.
+Original, Auto Clean, Crop-Box, angewendeter Crop, Original-Rückkehr und dunkler Hintergrund
+wurden als lokale Screenshots unter `artifacts/scan-verification/` gesichert (Git-ignoriert).
+
+- Original: 448.567 Dreiecke, 1 Mesh, 44 Komponenten; Dimensionen 3,638 × 3,408 × 3,707.
+- Auto Clean: gleiche Dreieckzahl/Bounds, 0 entfernte Komponenten. Keine klar isolierten
+  kleinen Teile erkannt. Fehlende Normalen waren bereits durch den GLTF-Import ergänzt;
+  die erneute geometrische Berechnung erzeugt deshalb keinen deutlichen sichtbaren Sprung.
+- Moderater Crop: 441.172 Dreiecke, Dimensionen 2,910 × 3,408 × 3,707. X-Bounds etwa
+  −1,81…1,83 → −1,45…1,46. Randfragmente werden sichtbar begrenzt.
+- Kein fertiges Game-Asset: die verbundenen ausgefransten Pflanzenflächen, Löcher und
+  gebackenen Texturfehler bleiben. Der Scan überschreitet auch nach diesem Crop das
+  Walk-Limit. Eine gezielte kleinere Sektion oder externe Meshbearbeitung ist erforderlich.
+- Software-GPU-Prüfung reduziert im Prüfskript die Renderfrequenz; der App-Build ist unverändert.
+
+Nächster sinnvoller Schritt: Crop mit einem tatsächlichen Tastatur-/Tischscan abstimmen;
+für dichte Scans eine separate, kontrollierte Kollisionsproxy-Pipeline statt automatischer
+starker visueller Decimation evaluieren.
+
+### Validierung des Cleanup-Stands
+
+- `npm run build`: erfolgreich; bekannte Vite-Warnung zum großen Three.js/Cannon-Bundle.
+- `npm test`: 41/41 erfolgreich, einschließlich aller bisherigen 28 Tests.
+- Nach zusätzlicher Absicherung des Cleanup-Limits auch für reine gespeicherte Offsets:
+  `npm test -- tests/scan-cleanup.spec.js`: 13/13 erfolgreich.
+- `npm audit --audit-level=moderate`: 0 Schwachstellen. `git diff --check`: sauber.
+- Production Preview im Browser: Walk-/Stufen-/Spawn-/v4-Roundtrip und Gameplay mit
+  Tastatur-Pickup, gesperrtem Ziel, Win/Restart und Editor-Rückkehr ohne JS-/Assetfehler.
+- Cleanup-Browserprüfung ergänzt die synthetischen Tests durch echte GLB-Importwege,
+  Auto Clean, Crop, Original-Rückkehr und Beleuchtungsumschaltung.

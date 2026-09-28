@@ -1,8 +1,9 @@
-# AGC project format, version 3 (v1/v2 compatible)
+# AGC project format, version 4 (v1/v2/v3 compatible)
 
-`.agc` files are UTF-8 JSON with `format: "agc-project"` and `version: 3`.
-Versions 1 and 2 are migrated in memory and exported as v3. Version 1 receives
-the walk defaults below; both older versions receive an empty gameplay array.
+`.agc` files are UTF-8 JSON with `format: "agc-project"` and `version: 4`.
+Versions 1, 2 and 3 are migrated in memory and exported as v4. Version 1 receives
+the walk defaults below; v1/v2 receive an empty gameplay array. All legacy versions
+receive Original mode, an empty cleanup recipe, and Studio presentation defaults.
 Other versions are rejected with a readable message. Additional fields are ignored and are not exported again. Maximum
 settings size is 2 MiB, with at most 500 objects and one model/scan.
 
@@ -42,7 +43,8 @@ A minimal empty project:
 ```json
 {
   "format": "agc-project",
-  "version": 3,
+  "version": 4,
+  "presentation": { "lighting": "studio", "exposure": 1.05, "background": "light" },
   "gameplay": [],
   "walk": { "slope": 40, "stepHeight": 0.2, "minArea": 0.1, "spawnMode": "auto", "spawn": null },
   "objects": [],
@@ -62,7 +64,7 @@ A minimal empty project:
 
 ## Walk state, validation and migration
 
-Version-2 and version-3 files require the complete `walk` object; invalid numeric types, missing
+Version-2, version-3 and version-4 files require the complete `walk` object; invalid numeric types, missing
 fields, out-of-range values or malformed spawn vectors are rejected before the
 current scene is replaced. Coordinates must be finite and each component within
 ±1,000,000. Manual mode requires a non-null position. Extra walk fields are ignored
@@ -82,8 +84,8 @@ while retaining the current thresholds.
 Version 1 had no persistent walk settings. Migration adds slope 40°, step height
 0.2 m, minimum region area 0.1 m², auto spawn and null coordinates before analysis.
 Existing transforms, object IDs, scan references, camera and reset baselines are
-unchanged. Older editors cannot read v3 files; keep old project copies if you need to return
-to either the v1.0.0 or v1.1.0-walkability source release.
+unchanged. Older editors cannot read v4 files; keep old project copies to return to the
+v1.2.0-gameplay (project v3) or earlier source releases.
 
 Region membership, region IDs, active region, triangle copies, spatial buckets,
 performance measurements and debug visibility are derived/session data and are
@@ -92,7 +94,7 @@ private scan data are introduced into `.agc`.
 
 ## Gameplay definitions (v3)
 
-`gameplay` is required in v3 and is an array of at most 100 objects. v1/v2 imports
+`gameplay` is required in v3/v4 and is an array of at most 100 objects. v1/v2 imports
 get `gameplay: []` (older unknown gameplay fields are not treated as v3 data).
 IDs must be non-empty strings of at most 100 characters and unique across both
 scene `objects` and `gameplay`. All gameplay object, rule and action field sets
@@ -184,3 +186,37 @@ backup of scans up to 250 MiB. IndexedDB could store scans, but needs quota and
 failure handling, replacement transactions and an explicit recovery workflow.
 That is a separate increment; manual export remains the durable backup. No new
 dependencies or uploads are introduced.
+
+## Version 4: reversible scan cleanup
+
+Every model requires `cleanup`:
+
+```json
+{
+  "algorithm": 1,
+  "mode": "original",
+  "auto": false,
+  "crop": null,
+  "offset": [0, 0, 0]
+}
+```
+
+- `algorithm` must equal 1, fixing the recipe semantics. `mode` is `original` or `cleaned`.
+- `auto` is a boolean enabling conservative island/outlier filtering and repair of missing/invalid/opposing normals.
+- `crop` is null or `{ "operation": "keep", "min": [-1,-1,-1], "max": [1,1,1] }`.
+  Operation is `keep` or `remove`. These bounds are in original scan-root coordinates,
+  before derived grounding. All coordinates must be finite numbers within ±1,000,000,
+  and every maximum must be strictly greater than its minimum. The crop replaces any previous crop.
+- `offset` is a finite three-number translation in scan-root coordinates, applied after filtering.
+  Auto Clean derives it from the active root pose to center world X/Z and place the lower bound on world Y=0.
+  The root's editable transform and transform-reset baseline remain independent.
+- Root `presentation` requires `lighting` (`studio`, `neutral`, `original`), `exposure`
+  (finite number 0.2–3), and `background` (`light`, `dark`). Original lighting means the previous editor rig.
+
+No triangle lists, textures, geometry buffers or local paths are saved. Opening verifies the
+original GLB and deterministically rebuilds derived geometry before replacing the current scene.
+Original mode still retains the recipe for comparison; Reset Cleanup clears it. Unsupported
+recipes, numeric strings, invalid bounds and unknown modes are rejected. The previous scene
+is retained if rebuilding fails. Walkability, spawn validation and collider bounds are rebuilt
+from the selected geometry; gameplay definitions remain intact. The 600,000-triangle cleanup
+budget is separate from the unchanged 100,000-triangle walk budget.

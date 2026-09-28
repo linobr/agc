@@ -1,5 +1,6 @@
+import { DEFAULT_CLEANUP, DEFAULT_PRESENTATION, validateCleanup, validatePresentation } from './scan-cleanup.js';
 import { validateGameplay } from "./gameplay.js";
-// AGC v3 adds declarative gameplay; v1 and v2 migrate in memory.
+// AGC v4 adds reversible cleanup recipes; v1–v3 migrate in memory.
 export const DEFAULT_WALK = Object.freeze({ slope:40, stepHeight:0.2, minArea:0.1, spawnMode:"auto", spawn:null });
 export const MAX_PROJECT_BYTES = 2 * 1024 * 1024;
 export const MAX_GLB_BYTES = 250 * 1024 * 1024;
@@ -36,9 +37,14 @@ export function parseProject(text) {
   try { p = JSON.parse(text); }
   catch { throw new Error("Invalid AGC project: the file is not valid JSON."); }
   requireValue(p?.format === "agc-project", "expected format agc-project");
-  if (![1,2,3].includes(p.version)) throw new Error(`Unsupported AGC project version: ${String(p.version)}. This editor supports versions 1, 2 and 3.`);
+  if (![1,2,3,4].includes(p.version)) throw new Error(`Unsupported AGC project version: ${String(p.version)}. This editor supports versions 1, 2, 3 and 4.`);
   if (p.version === 1) { p.walk = { ...DEFAULT_WALK }; p.version = 2; }
   if (p.version === 2) { p.gameplay = []; p.version = 3; }
+  if (p.version === 3) {
+    for (const o of Array.isArray(p.objects) ? p.objects : []) if (o?.kind === "model") o.cleanup = structuredClone(DEFAULT_CLEANUP);
+    p.presentation = { ...DEFAULT_PRESENTATION }; p.version = 4;
+  }
+  p.presentation = validatePresentation(p.presentation);
   const w = p.walk;
   requireValue(w && typeof w === 'object', 'walk settings');
   for (const [key,min,max] of [['slope',0,50],['stepHeight',0,0.4],['minArea',0,10]])
@@ -61,6 +67,7 @@ export function parseProject(text) {
     pose(o.initial, "reset transform");
     if (o.kind === "model") {
       models++;
+      o.cleanup = validateCleanup(o.cleanup);
       const s = o.source;
       requireValue(s && typeof s.fileName === "string" && s.fileName.length <= 255 &&
         /^[^\\/:]+\.glb$/i.test(s.fileName), "scan filename must be a GLB basename, without a path");

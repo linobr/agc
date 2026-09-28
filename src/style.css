@@ -1143,3 +1143,13 @@ button {
 .game-win { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; background: #183425aa; }
 .game-win > div { padding: 28px; border-radius: 10px; background: #fff; text-align: center; }
 .game-win[hidden], .game-hud[hidden] { display: none; }
+
+.scan-readout { white-space: pre-line; overflow-wrap: anywhere; font-size: 11px; line-height: 1.6; color: #65736b; }
+.scan-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+#scanPanel button { padding: 7px 9px; border: 1px solid #bfcac1; border-radius: 5px; background: #f5f8f4; cursor: pointer; }
+#scanPanel p, .lighting-section p { font-size: 11px; line-height: 1.5; }
+.crop-fields { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 5px; }
+.crop-fields label { font-size: 10px; }
+.crop-fields input { width: 100%; min-width: 0; }
+.lighting-section label { display: flex; justify-content: space-between; margin: 9px 0; }
+.lighting-section input { width: 90px; }

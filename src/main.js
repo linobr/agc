@@ -1,3 +1,5 @@
+import { ScanEditor, prepareScan, disposeScan } from './scan-editor.js';
+import { DEFAULT_PRESENTATION, validatePresentation } from './scan-cleanup.js';
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
@@ -39,7 +41,8 @@ transform.addEventListener("dragging-changed", (e) => {
 });
 transform.addEventListener("objectChange", syncInspector);
 
-scene.add(new THREE.HemisphereLight(0xf5f8ff, 0x879083, 2.0));
+const hemisphere = new THREE.HemisphereLight(0xffffff, 0xb3bcc4, 2.0);
+scene.add(hemisphere);
 const key = new THREE.DirectionalLight(0xfff4df, 3.2);
 key.position.set(5, 9, 5);
 scene.add(key);
@@ -70,6 +73,25 @@ world.allowSleep = true;
 world.broadphase = new CANNON.SAPBroadphase(world);
 world.addBody(floor);
 
+let presentation = { ...DEFAULT_PRESENTATION };
+function applyPresentation(value = presentation) {
+  presentation = validatePresentation(value);
+  const original = value.lighting === "original", neutral = value.lighting === "neutral";
+  hemisphere.color.set(original ? 0xf5f8ff : 0xffffff);
+  hemisphere.groundColor.set(original ? 0x879083 : 0xb3bcc4);
+  hemisphere.intensity = neutral ? 2.4 : 2;
+  key.color.set(original ? 0xfff4df : 0xffffff); key.intensity = original ? 3.2 : neutral ? 1.2 : 2.8;
+  fill.color.set(original ? 0xddeaff : 0xffffff); fill.intensity = original ? 1.25 : neutral ? 0.6 : 1.5;
+  renderer.toneMappingExposure = value.exposure;
+  scene.background.set(value.background === "dark" ? "#252b32" : "#eef0ec");
+  ground.material.color.set(value.background === "dark" ? "#343c43" : "#e6e8e3");
+  $("lightingMode").value=value.lighting; $("exposure").value=value.exposure; $("backgroundMode").value=value.background;
+}
+for (const id of ["lightingMode","exposure","backgroundMode"]) $(id).onchange=()=> {
+  try { applyPresentation({lighting:$("lightingMode").value, exposure:Number($("exposure").value), background:$("backgroundMode").value}); }
+  catch(error) { notify(error.message); applyPresentation(); }
+};
+applyPresentation();
 let objects = [],
   selected = null,
   tool = "select",
@@ -90,6 +112,19 @@ const gameplayEditor = new GameplayEditor(scene, {
   position: () => walkData?.spawn || new THREE.Vector3(0,0,0),
   notify,
   change: updateStats,
+});
+const scanEditor = new ScanEditor(scene, {
+  entry: () => objects.find(e=>e.kind==='model'),
+  busy: () => testMode || !!walkPlayer || !$("loadingOverlay").hidden || !!pendingProject,
+  loading: showLoading,
+  progress: message => { $("loadProgress").textContent=message; },
+  loaded: () => { $("loadingOverlay").hidden=true; },
+  changed: entry => {
+    disposeWalk();
+    entry.triangleCount=entry.scan.cleanup.mode==='cleaned' ? (entry.scan.derived?.triangles ?? entry.scan.analysis.triangles) : entry.scan.analysis.triangles;
+    refreshCollider(entry); syncInspector(); rebuildWalk(); updateStats(); focus(entry);
+    return walkData ? "Collider bounds and walkability rebuilt; spawn revalidated." : `Collider bounds rebuilt. Walkability unavailable: ${$("walkStatus").textContent}`;
+  },
 });
 const walkHelpers = new THREE.Group(), walkKeys = new Set();
 scene.add(walkHelpers);
@@ -170,7 +205,7 @@ function localBoundsFor(root) {
   const inv = root.matrixWorld.clone().invert(),
     box = new THREE.Box3();
   root.traverse((o) => {
-    if (!o.isMesh || !o.geometry?.attributes.position) return;
+    if (!o.isMesh || !o.geometry?.attributes.position?.count) return;
     if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
     const relative = inv.clone().multiply(o.matrixWorld);
     box.union(o.geometry.boundingBox.clone().applyMatrix4(relative));
@@ -240,7 +275,9 @@ function removeEntry(entry) {
   if (!entry) return;
   if (entry.body) world.removeBody(entry.body);
   scene.remove(entry.root, entry.overlay);
+  disposeScan(entry.scan);
   cleanNode(entry.root);
+  scanEditor.cropping=false;
   entry.overlay.geometry.dispose();
   entry.overlay.material.dispose();
   objects = objects.filter((o) => o !== entry);
@@ -297,12 +334,17 @@ async function decodeGLB(bytes) {
       throw new Error("GLB must contain its textures and buffers; external file references are unsupported.");
   }
   const gltf = await new GLTFLoader().parseAsync(bytes, "");
+  gltf.scene.traverse(mesh => {
+    const association = gltf.parser.associations.get(mesh);
+    const primitive = json.meshes?.[association?.meshes]?.primitives?.[association?.primitives];
+    if (primitive && primitive.attributes.NORMAL === undefined) mesh.userData.agcMissingNormals = true;
+  });
   try { boundsFor(gltf.scene); localBoundsFor(gltf.scene); }
   catch (error) { cleanNode(gltf.scene); throw error; }
   return gltf.scene;
 }
 async function importFile(file) {
-  if (!file) return;
+  if (!file || !$("loadingOverlay").hidden) return;
   if (!file.name.toLowerCase().endsWith(".glb")) {
     notify("Unsupported file. Choose a binary .glb model.");
     return;
@@ -322,15 +364,20 @@ async function importFile(file) {
     if (token !== loadToken) return;
     root = await decodeGLB(bytes);
     if (token !== loadToken) { cleanNode(root); return; }
+    const scan = await prepareScan(root, undefined, message => { $("loadProgress").textContent=message; });
+    if (token !== loadToken) { disposeScan(scan); cleanNode(root); return; }
     resetTest();
     for (const old of [...objects].filter((o) => o.kind === "model")) removeEntry(old);
     const entry = addEntry(root, fileName(file.name).replace(/\.glb$/i, ""));
     entry.source = source;
+    entry.scan = scan;
+    scanEditor.update();
     walkSettings.spawnMode = "auto"; walkSettings.spawn = null;
     rebuildWalk();
     projectMessage("Scan imported. Save Project downloads settings; keep the original GLB. No autosave.");
     notify(`Imported ${source.fileName} · ${entry.meshes} meshes`);
   } catch (error) {
+    if (root && !objects.some(entry => entry.root === root)) cleanNode(root);
     if (token === loadToken) notify(`GLB decode failed: ${error.message}`);
   } finally {
     if (token === loadToken) $("loadingOverlay").hidden = true;
@@ -357,7 +404,8 @@ function saveProject() {
   }
   try {
     const project = {
-      format: "agc-project", version: 3,
+      format: "agc-project", version: 4,
+      presentation: { ...presentation },
       gameplay: structuredClone(gameplayEditor.definitions),
       walk: { ...walkSettings },
       objects: objects.map((o) => ({
@@ -365,7 +413,7 @@ function saveProject() {
         bodyType: o.bodyType, collider: o.collider,
         transform: serializePose(testMode ? o.initial : o.root),
         initial: serializePose(o.initial),
-        ...(o.kind === "model" ? { source: { fileName: o.source.fileName, byteLength: o.source.byteLength, sha256: o.source.sha256 } } : { color: `#${o.root.children[0].material.color.getHexString()}` }),
+        ...(o.kind === "model" ? { cleanup: structuredClone(o.scan.cleanup), source: { fileName: o.source.fileName, byteLength: o.source.byteLength, sha256: o.source.sha256 } } : { color: `#${o.root.children[0].material.color.getHexString()}` }),
       })),
       editor: {
         selectedId: selected?.id || null, tool, collidersVisible,
@@ -386,7 +434,7 @@ function saveProject() {
   } catch (error) { projectMessage(`Could not save project: ${error.message}`); }
 }
 async function openProject(file) {
-  if (!file) return;
+  if (!file || !$("loadingOverlay").hidden) return;
   const token = ++loadToken;
   clearPendingProject();
   showLoading("Reading project settings…");
@@ -400,7 +448,7 @@ async function openProject(file) {
       $("chooseProjectScan").hidden = false;
       $("cancelProject").hidden = false;
       projectMessage(`Choose original GLB: ${model.source.fileName} (${model.source.byteLength} bytes). The scan is not embedded. Your current scene remains until loading succeeds. ${model.source.sha256 ? "SHA-256 will verify the scan." : "Filename and size only: this project has no checksum."}`);
-    } else applyProject(project);
+    } else await applyProject(project, null, token);
   } catch (error) {
     if (token === loadToken) projectMessage(`Could not open project: ${error.message}`);
   } finally {
@@ -408,7 +456,7 @@ async function openProject(file) {
   }
 }
 async function openProjectScan(file) {
-  if (!file || !pendingProject) return;
+  if (!file || !pendingProject || !$("loadingOverlay").hidden) return;
   const project = pendingProject;
   const source = project.objects.find((o) => o.kind === "model").source;
   const token = ++loadToken;
@@ -427,20 +475,22 @@ async function openProjectScan(file) {
       throw new Error("The scan checksum does not match. Choose the original, unchanged GLB.");
     root = await decodeGLB(bytes);
     if (token !== loadToken) { cleanNode(root); return; }
-    applyProject(project, root);
+    await applyProject(project, root, token);
   } catch (error) {
     if (token === loadToken) projectMessage(`Could not open project: ${error.message} The current scene is unchanged; retry or cancel.`);
   } finally {
     if (token === loadToken) $("loadingOverlay").hidden = true;
   }
 }
-function applyProject(project, modelRoot = null) {
+async function applyProject(project, modelRoot = null, token = loadToken) {
   const prepared = [];
   try {
     // Validate geometry and transformed bounds before replacing the current scene.
     for (const data of project.objects) {
       const root = data.kind === "model" ? modelRoot : primitiveRoot(data.color);
-      prepared.push({ data, root });
+      const preparedEntry = { data, root };
+      prepared.push(preparedEntry);
+      if (data.kind === "model") preparedEntry.scan = await prepareScan(root, data.cleanup, message => { $("loadProgress").textContent=message; });
       restorePose(root, data.initial);
       boundsFor(root);
       restorePose(root, data.transform);
@@ -448,19 +498,21 @@ function applyProject(project, modelRoot = null) {
       localBoundsFor(root);
     }
   } catch (error) {
-    for (const { root } of prepared) cleanNode(root);
+    for (const { root, scan } of prepared) { disposeScan(scan); cleanNode(root); }
     if (modelRoot && !prepared.some(({ root }) => root === modelRoot)) cleanNode(modelRoot);
     throw error;
   }
+  if (token !== loadToken) { for (const { root, scan } of prepared) { disposeScan(scan); cleanNode(root); } return; }
   resetTest();
   for (const entry of [...objects]) removeEntry(entry);
   gameplayEditor.load(project.gameplay);
   collidersVisible = project.editor.collidersVisible;
   $("colliderToggle").classList.toggle("on", collidersVisible);
-  for (const { data, root } of prepared) {
+  for (const { data, root, scan } of prepared) {
     const entry = addEntry(root, data.name, data.kind);
     entry.id = data.id;
     entry.source = data.source;
+    entry.scan = scan;
     entry.bodyType = data.bodyType;
     entry.collider = data.collider;
     entry.initial = {
@@ -471,6 +523,8 @@ function applyProject(project, modelRoot = null) {
     restorePose(root, data.transform);
     refreshCollider(entry);
   }
+  applyPresentation(project.presentation);
+  scanEditor.cropping=false; scanEditor.update();
   setTool(project.editor.tool);
   select(objects.find((o) => o.id === project.editor.selectedId) || null);
   updateStats();
@@ -1087,7 +1141,8 @@ function loop() {
       refreshCollider(e);
     }
   }
-  renderer.render(scene, camera);
+  scanEditor.tick();
+  if ($("loadingOverlay").hidden) renderer.render(scene, camera);
 }
 const clock = new THREE.Clock();
 loop();
@@ -1186,6 +1241,7 @@ window.addEventListener("keydown", (e) => {
 });
 if (import.meta.env.DEV)
   window.agcDebug = {
+    scanEditor,
     get gameplay() { return { editor: gameplayEditor, session: gameSession }; },
     get walk() { return { data: walkData, player: walkPlayer }; },
     get objects() {
