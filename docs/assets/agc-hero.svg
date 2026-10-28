@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" role="img" aria-labelledby="title desc">
+<title id="title">AGC – vom Scan zur Spielszene</title><desc id="desc">Ein lokaler Browser-Editor für GLB-Scans. Importieren, Geometrie aufbereiten und interaktive Szenen testen.</desc><defs>
+<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0b1220"/><stop offset="1" stop-color="#121c33"/></linearGradient>
+<linearGradient id="accent" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#56e4cf"/><stop offset="1" stop-color="#79a7ff"/></linearGradient>
+<pattern id="grid" width="36" height="36" patternUnits="userSpaceOnUse"><path d="M36 0H0V36" fill="none" stroke="#263550" stroke-width="1" opacity=".35"/></pattern>
+</defs>
+<rect width="1200" height="420" rx="24" fill="url(#bg)"/>
+<g font-family="Segoe UI,Arial,sans-serif"><rect width="1200" height="420" rx="24" fill="url(#grid)"/>
+<rect x="58" y="40" width="241" height="32" rx="16" fill="#172a3b" stroke="#2a5b63"/>
+<circle cx="77" cy="56" r="4" fill="#56e4cf"/>
+<text x="91" y="62" font-size="13" font-weight="600" letter-spacing="1.6" fill="#9aefe2">AGC / BROWSER EDITOR</text>
+<text x="58" y="153" font-size="64" font-weight="700" letter-spacing="-2" fill="#f1f6ff">Vom Scan</text>
+<text x="58" y="224" font-size="64" font-weight="700" letter-spacing="-2" fill="url(#accent)">zur Spielszene.</text>
+<text x="61" y="270" font-size="21" fill="#aebed8">GLB importieren. Geometrie kontrollieren.</text>
+<text x="61" y="302" font-size="21" fill="#aebed8">Eigene Regeln im Browser testen.</text>
+<path d="M61 339H565" stroke="#2c3d59"/>
+<text x="61" y="371" font-size="14" font-weight="600" letter-spacing=".7" fill="#c7d4eb">LOKAL IM BROWSER</text>
+<circle cx="257" cy="366" r="2" fill="#586e90"/>
+<text x="276" y="371" font-size="14" font-weight="600" letter-spacing=".7" fill="#c7d4eb">ORIGINAL BLEIBT ERHALTEN</text>
+<g transform="translate(700,63)">
+<path d="M0 230 205 115 410 230 205 345Z" fill="#102a3c" stroke="#325e75" stroke-width="1.5"/>
+<path d="M50 202 255 317M100 174 305 289M150 146 355 261M50 258 255 143M100 286 305 171M150 314 355 199" fill="none" stroke="#28526c"/>
+<path d="M90 171 205 107 320 171 205 237Z" fill="#204e5c" fill-opacity=".65" stroke="#56e4cf" stroke-width="2"/>
+<path d="M90 171V78L205 15 320 78V171M205 15V107M90 78 205 141 320 78M205 141V237" fill="none" stroke="#7cafff" stroke-width="2"/>
+<path d="M90 78 205 107 320 78M90 171 205 141 320 171M205 15 205 141" fill="none" stroke="#405c8d"/>
+<path d="M70 228Q136 184 183 212T294 218" fill="none" stroke="#56e4cf" stroke-width="3" stroke-dasharray="6 7"/>
+<circle cx="70" cy="228" r="7" fill="#56e4cf"/><circle cx="294" cy="218" r="8" fill="#9cafff"/>
+<circle cx="90" cy="78" r="5" fill="#7cafff"/><circle cx="205" cy="15" r="5" fill="#7cafff"/><circle cx="320" cy="78" r="5" fill="#7cafff"/>
+</g></g></svg>

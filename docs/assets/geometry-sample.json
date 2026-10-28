@@ -1,0 +1,33 @@
+{
+  "source": {
+    "file": "AGC_PROGRESS.md",
+    "section": "2026-09-28 — Optimized, Crop-Schritte, Collision-Proxies und v5",
+    "commit": "de08748887b6883bcd8f4e3784736a2fe880a306",
+    "measured_at": "2026-09-28",
+    "kind": "documented_single_scan_example",
+    "fresh_benchmark": false
+  },
+  "units": "triangles",
+  "visual": {
+    "original": 448567,
+    "optimized": 199999,
+    "target": 200000,
+    "relative_error_limit": 0.001
+  },
+  "collision": {
+    "default_proxy": 19939,
+    "default_target": 20000,
+    "default_error_limit": 0.01,
+    "default_result": "blocked_by_local_triangle_density",
+    "adjusted_proxy": 7195,
+    "adjusted_target": 5000,
+    "adjusted_error_limit": 0.02,
+    "adjusted_world_test_result": "valid_spawn_and_grounded_walk",
+    "after_walk_duplicate_filter": 7101
+  },
+  "notes": [
+    "Visual and collision counts describe different geometry.",
+    "Targets are requested budgets, not guaranteed output counts.",
+    "This is not a hardware or FPS benchmark."
+  ]
+}
