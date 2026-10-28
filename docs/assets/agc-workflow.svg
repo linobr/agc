@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 576" role="img" aria-labelledby="title desc">
+<title id="title">Ein Original, zwei getrennte Aufgaben</title><desc id="desc">Das unveränderte Original speist Darstellung und Kollision. Sichtbar sind Original, Cleaned oder Optimized. Der Kollisionsproxy wird aus Original oder Cleaned abgeleitet und für Walk und Game Test geprüft.</desc><defs>
+<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0b1220"/><stop offset="1" stop-color="#121c33"/></linearGradient>
+<linearGradient id="accent" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#56e4cf"/><stop offset="1" stop-color="#79a7ff"/></linearGradient>
+<pattern id="grid" width="36" height="36" patternUnits="userSpaceOnUse"><path d="M36 0H0V36" fill="none" stroke="#263550" stroke-width="1" opacity=".35"/></pattern>
+</defs>
+<rect width="1200" height="576" rx="24" fill="url(#bg)"/>
+<g font-family="Segoe UI,Arial,sans-serif"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0 10 5 0 10Z" fill="#6984ad"/></marker></defs>
+<text x="48" y="54" font-size="14" letter-spacing="1.8" font-weight="600" fill="#56e4cf">SO FUNKTIONIERT AGC</text>
+<text x="48" y="100" font-size="34" font-weight="700" fill="#f1f6ff">Ein Original. Zwei getrennte Aufgaben.</text>
+<rect x="370" y="134" width="460" height="78" rx="14" fill="#1d3349" stroke="#58cfbf"/>
+<text x="600" y="166" font-size="21" font-weight="600" text-anchor="middle" fill="#f1f6ff">Original GLB</text>
+<text x="600" y="191" font-size="16" text-anchor="middle" fill="#aebed8">Unverändert im Browser erhalten</text>
+<path d="M600 212V241H310V270M600 241H890V270" fill="none" stroke="#6984ad" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M310 241V270" fill="none" stroke="#6984ad" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="60" y="274" width="500" height="103" rx="14" fill="#152b38" stroke="#3b726e"/>
+<text x="86" y="306" font-size="14" letter-spacing="1.6" fill="#56e4cf">DARSTELLUNG</text>
+<text x="86" y="338" font-size="23" font-weight="600" fill="#f1f6ff">Original · Cleaned · Optimized</text>
+<text x="86" y="363" font-size="16" fill="#b7ccda">Vergleichbare Ansichten, getrennt vom Proxy</text>
+<rect x="640" y="274" width="500" height="103" rx="14" fill="#1a2642" stroke="#526ca4"/>
+<text x="666" y="306" font-size="14" letter-spacing="1.6" fill="#8dafff">KOLLISION</text>
+<text x="666" y="338" font-size="23" font-weight="600" fill="#f1f6ff">Eigenständiger Collision Proxy</text>
+<text x="666" y="363" font-size="16" fill="#b7ccda">Abgeleitet aus Original oder Cleaned</text>
+<path d="M310 377V412M890 377V412" fill="none" stroke="#6984ad" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="60" y="416" width="500" height="78" rx="14" fill="#10202f" stroke="#2a3b58"/>
+<text x="86" y="448" font-size="21" font-weight="600" fill="#f1f6ff">Three.js-Ansicht</text>
+<text x="86" y="474" font-size="16" fill="#aebed8">Sichtbare Geometrie und Materialien</text>
+<rect x="640" y="416" width="500" height="78" rx="14" fill="#10202f" stroke="#2a3b58"/>
+<text x="666" y="448" font-size="21" font-weight="600" fill="#f1f6ff">Walk Test &amp; Game Test</text>
+<text x="666" y="474" font-size="16" fill="#aebed8">Regionen, Spawn und Bewegung validieren</text>
+<text x="60" y="545" font-size="16" fill="#9fb0cd">Fehlt ein verwendbarer Proxy, prüft AGC die verfügbare visuelle Geometrie als Fallback.</text></g></svg>
