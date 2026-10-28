@@ -1,21 +1,44 @@
 # AGC — Automatic Game Creator
 
-AGC is a local-first browser editor for turning a 3D scan into an object you can inspect, position and try in a small physics scene. Import a GLB, align it, inspect detected floor candidates and try walking through it. The separate rigid-body Physics Test and project Save/Open remain available.
+A browser-based editor for turning a 3D scan into a small interactive scene. Import a GLB, align it, inspect walkable surfaces and build simple gameplay rules without code.
 
-Public app: **https://linobr.github.io/agc/**. `main` contains the editor, Save/Open Project and the scan Walk Test MVP.
+**[Open the app](https://linobr.github.io/agc/)** · [Run locally](#run-locally) · [Controls](#controls) · [Checks](#checks) · [Preview](#prototype-preview)
 
-The original Walk Test MVP is preserved as [GitHub release v1.0.0](https://github.com/linobr/agc/releases/tag/v1.0.0), pinned to `6594030`. The walkability increment is preserved as [v1.1.0-walkability](https://github.com/linobr/agc/releases/tag/v1.1.0-walkability), pinned to `b9af19e`. These releases are source recovery points; Pages follows `main`.
+## What you can do
 
-`main` is the current working, checked source. Keep completed, checked work on `main`. Never include secrets, runtime data or private user assets in Git or releases.
+| Task | Tools |
+| --- | --- |
+| Prepare a scan | Import, transform, ground, crop and reversible cleanup |
+| Reduce geometry | Visual optimization and a separate collision proxy |
+| Check movement | Walkable regions, spawn validation and Walk Test |
+| Build a small game | Triggers, goals, collectibles and event/action rules |
+| Test rigid bodies | Separate Physics Test with simplified colliders |
+| Continue later | Save/Open Project with versioned project data |
+
+## Contents
+
+- [Run locally](#run-locally)
+- [Controls](#controls)
+- [Make a small game without code](#make-a-small-game-without-code)
+- [Save and reopen a project](#save-and-reopen-a-project)
+- [Prototype limits](#prototype-limits)
+- [Checks](#checks)
+- [Prototype preview](#prototype-preview)
+- [Walk Test: regions, steps and spawn](#walk-test-regions-steps-and-spawn)
+- [Reversible scan cleanup](#reversible-scan-cleanup-project-v5)
 
 ## Run locally
 
+Use Node.js 22 or newer, npm and a browser with WebGL support. The dependency versions and scripts are defined in [package.json](package.json).
+
 ```sh
+git clone https://github.com/linobr/agc.git
+cd agc
 npm ci
-npm run dev -- --host 0.0.0.0
+npm run dev
 ```
 
-Open `/agc/` on the dev server. The Vite build uses `/agc/` as its base path for the existing GitHub Pages deployment. `npm run build` verifies the static output; no upload endpoint or AI service is used. Imported files remain in the browser tab and are never sent to a server.
+Open the printed local dev-server address with `/agc/` as the path, normally `http://localhost:5173/agc/`. Add `-- --host 0.0.0.0` to the dev command only when access from another device is needed. The Vite build uses `/agc/` as its base path for the existing GitHub Pages deployment. `npm run build` verifies the static output; no upload endpoint or AI service is used. Imported files remain in the browser tab and are never sent to a server.
 
 ## Controls
 
@@ -79,6 +102,14 @@ The user's Scaniverse palm is a local-only test file and is not included in this
 Next recommended development step: a game validation/readiness panel (unreachable or inactive items, missing win condition), followed by a standalone playable export. Cancellable scan analysis in a worker and real-device scan tests remain performance priorities.
 
 ## Checks
+
+Install Playwright's Chromium browser once before the browser tests:
+
+```sh
+npx playwright install chromium
+```
+
+Then run:
 
 ```sh
 npm test
@@ -236,7 +267,6 @@ uses a running production preview and stores ignored screenshots/metrics in `art
 The optional private scan is accepted only on localhost; live verification uses generated
 fixtures. Never add private GLBs, screenshots or traces to Git.
 
-
 Optimized/proxy production check (generated scan for live; private file allowed only locally):
 
 ```sh
@@ -250,7 +280,6 @@ estimated errors and generation timings. Cached variants are reused on view swit
 recipe changes regenerate affected data and revalidate walkability/spawn. Crop preview and
 undo history are intentionally session-only; saved crop steps and optimization/proxy settings
 are rebuilt from the separately retained original GLB when opening a v5 project.
-
 
 Representative local scan check (448,567 triangles): default Optimized produced 199,999
 triangles without a pronounced degradation in the inspected overview/detail screenshots.
@@ -314,3 +343,11 @@ Production verification (private path accepted only with localhost URL):
 node scripts/verify-intelligence.js http://127.0.0.1:4189/agc/ /absolute/path/to/scan.glb
 node scripts/verify-intelligence.js https://linobr.github.io/agc/
 ```
+
+## Source and recovery points
+
+The original Walk Test MVP is preserved as [GitHub release v1.0.0](https://github.com/linobr/agc/releases/tag/v1.0.0), pinned to `6594030`. The walkability increment is preserved as [v1.1.0-walkability](https://github.com/linobr/agc/releases/tag/v1.1.0-walkability), pinned to `b9af19e`. These releases are source recovery points; Pages follows `main`.
+
+`main` is the current working, checked source. Keep completed, checked work on `main`. Never include secrets, runtime data or private user assets in Git or releases.
+
+Project data is described in [AGC_PROJECT_FORMAT.md](AGC_PROJECT_FORMAT.md). Current implementation evidence is recorded in [AGC_PROGRESS.md](AGC_PROGRESS.md).
